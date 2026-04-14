@@ -1,370 +1,509 @@
-import { useEffect, useState } from "react";
-import { Alert, Pressable, Text, View } from "react-native";
-
-import { useCreateWorkoutPlan } from "@/hooks/useCreateWorkoutPlan";
-import { Button, Field, ToggleField } from "@/components/ui";
-import { ScreenContainer } from "@/components/screen-container";
-import { SectionCard } from "@/components/section-card";
-import type { Exercise, WorkoutPlanInput } from "@/types/database";
+import { useState, useEffect } from "react";
+import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal, Pressable, Platform } from "react-native";
 import { supabase } from "@/lib/supabase";
-import { createUserSchedule, fetchMyActiveSchedules } from "@/lib/schedule";
-import { searchExercisesByName } from "@/lib/exercises";
 
-const initialPlan: WorkoutPlanInput = {
-  title: "",
-  description: "",
-  is_public: true,
-  duration_weeks: 4,
-  days: [
-    {
-      day_number: 1,
-      exercise_id: "",
-      sets: 4,
-      reps: 8,
-      weight: 60,
-    },
-  ],
+type BuilderExercise = {
+  tempId: string;
+  exercise_id: string;
+  exercise_name: string;
+  sets: string;
+  reps: string;
+  rpe: string;
+  percentage: string;
+  notes: string;
 };
 
+type BuilderDay = {
+  tempId: string;
+  day_of_week: number;
+  name: string;
+  exercises: BuilderExercise[];
+};
+
+const DAYS_OF_WEEK = ["Po", "Út", "St", "Čt", "Pá", "So", "Ne"];
+
 export default function PlansScreen() {
-  const [plan, setPlan] = useState<WorkoutPlanInput>(initialPlan);
-  const createWorkoutPlan = useCreateWorkoutPlan();
+  const [viewMode, setViewMode] = useState<'list' | 'builder'>('list');
+  
+  const [plans, setPlans] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [myPlans, setMyPlans] = useState<Array<{ id: string; title: string }>>(
-    [],
-  );
-  const [isLoadingMyPlans, setIsLoadingMyPlans] = useState(false);
-  const [selectedPlanId, setSelectedPlanId] = useState<string>("");
-  const [scheduleStartDate, setScheduleStartDate] = useState<string>("");
+  // BUILDER STAVY
+  const [planName, setPlanName] = useState("");
+  const [builderDays, setBuilderDays] = useState<BuilderDay[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null); // HLÍDÁ, JESTLI UPRAVUJEME
 
-  const [activeSchedulesCount, setActiveSchedulesCount] = useState(0);
-  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [targetDayIndex, setTargetDayIndex] = useState<number | null>(null);
+  const [targetExIndex, setTargetExIndex] = useState<number | null>(null);
 
-  const [exerciseSearchQuery, setExerciseSearchQuery] = useState("");
-  const [exerciseSearchResults, setExerciseSearchResults] = useState<
-    Exercise[]
-  >([]);
-  const [isSearchingExercises, setIsSearchingExercises] = useState(false);
-
-  const updateFirstDay = (
-    key: "exercise_id" | "sets" | "reps" | "weight",
-    value: string,
-  ) => {
-    setPlan((current) => ({
-      ...current,
-      days: current.days.map((day, index) =>
-        index !== 0
-          ? day
-          : {
-              ...day,
-              [key]:
-                key === "exercise_id" ? value : Number.parseInt(value || "0", 10),
-            },
-      ),
-    }));
+  const fetchPlans = async () => {
+    setLoading(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data } = await supabase.from('workout_plans').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+      if (data) setPlans(data);
+    }
+    setLoading(false);
   };
 
-  useEffect(() => {
-    const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    setScheduleStartDate(`${yyyy}-${mm}-${dd}`);
-  }, []);
+  useEffect(() => { fetchPlans(); }, [viewMode]);
 
-  useEffect(() => {
-    let isMounted = true;
+  const handleSetActive = async (planId: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase.from('workout_plans').update({ is_active: false }).eq('user_id', user.id);
+    await supabase.from('workout_plans').update({ is_active: true }).eq('id', planId);
+    fetchPlans();
+  };
 
-    const loadMyPlans = async () => {
+ const handleDeletePlan = async (planId: string) => {
+    console.log("!!! MAZÁNÍ STISKUNTO !!! pro ID:", planId);
+
+    const executeDeletion = async () => {
+      console.log("Provádím mazání v databázi...");
       try {
-        setIsLoadingMyPlans(true);
-        setScheduleError(null);
+        const { error } = await supabase
+          .from('workout_plans')
+          .delete()
+          .eq('id', planId);
 
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
-        if (userError) throw userError;
-        if (!user) return;
-
-        const { data, error } = await supabase
-          .from("workout_plans")
-          .select("id,title")
-          .eq("creator_id", user.id)
-          .order("created_at", { ascending: false });
-
-        if (error) throw error;
-        const list = (data ?? []) as Array<{ id: string; title: string }>;
-
-        if (!isMounted) return;
-        setMyPlans(list);
-        if (!selectedPlanId && list[0]?.id) setSelectedPlanId(list[0].id);
-      } catch (e) {
-        const message = e instanceof Error ? e.message : "Chyba při načítání.";
-        if (!isMounted) return;
-        setScheduleError(message);
-      } finally {
-        if (!isMounted) return;
-        setIsLoadingMyPlans(false);
+        if (error) {
+          console.error("Chyba ze Supabase při mazání:", error);
+          Alert.alert("Chyba", error.message);
+        } else {
+          console.log("Smazáno úspěšně.");
+          fetchPlans(); // Obnovit seznam
+        }
+      } catch (err) {
+        console.error("Neočekávaný pád při mazání:", err);
       }
     };
 
-    const loadScheduleCount = async () => {
-      try {
-        const schedules = await fetchMyActiveSchedules();
-        if (isMounted) setActiveSchedulesCount(schedules.length);
-      } catch {
-        if (isMounted) setActiveSchedulesCount(0);
+    // OPRAVA PRO WEB: Alert.alert na webu často selže/neukáže se
+    if (Platform.OS === 'web') {
+      if (window.confirm("Opravdu chceš smazat celou šablonu?")) {
+        executeDeletion();
       }
-    };
-
-    void loadMyPlans();
-    void loadScheduleCount();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [selectedPlanId]);
-
-  const handleSearchExercises = async () => {
-    const q = exerciseSearchQuery.trim();
-    if (!q) {
-      setExerciseSearchResults([]);
-      return;
+    } else {
+      // Mobilní verze
+      Alert.alert("Smazat plán", "Opravdu smazat celou šablonu?", [
+        { text: "Zrušit", style: "cancel" },
+        { text: "Smazat", style: "destructive", onPress: executeDeletion }
+      ]);
     }
+  };
 
+  // --- NAČTENÍ PLÁNU DO EDITACE ---
+  const handleEditPlan = async (planId: string) => {
+    setLoading(true);
     try {
-      setIsSearchingExercises(true);
-      const results = await searchExercisesByName(q);
-      setExerciseSearchResults(results);
-    } catch (e) {
-      const message =
-        e instanceof Error ? e.message : "Nepodařilo se vyhledat cviky.";
-      Alert.alert("Chyba", message);
+      // Stáhneme celý plán i se dny a cviky
+      const { data, error } = await supabase
+        .from('workout_plans')
+        .select('*, plan_days(*, plan_exercises(*, exercises(name)))')
+        .eq('id', planId)
+        .single();
+      
+      if (error) throw error;
+
+      setPlanName(data.name);
+      setEditingPlanId(data.id);
+
+      // Přeložíme to do formátu, kterému rozumí Builder
+      const loadedDays: BuilderDay[] = data.plan_days.map((d: any) => ({
+        tempId: Math.random().toString(),
+        day_of_week: d.day_of_week,
+        name: d.name || "",
+        exercises: d.plan_exercises.map((ex: any) => ({
+          tempId: Math.random().toString(),
+          exercise_id: ex.exercise_id,
+          exercise_name: ex.exercises.name,
+          sets: ex.sets?.toString() || "",
+          reps: ex.reps?.toString() || "",
+          rpe: ex.rpe?.toString() || "",
+          percentage: ex.percentage?.toString() || "",
+          notes: ex.notes || ""
+        })).sort((a: any, b: any) => a.sort_order - b.sort_order)
+      }));
+
+      setBuilderDays(loadedDays);
+      setViewMode('builder');
+    } catch (e: any) {
+      Alert.alert("Chyba při načítání plánu", e.message);
     } finally {
-      setIsSearchingExercises(false);
+      setLoading(false);
     }
   };
 
-  const handleCreateSchedule = async () => {
-    if (!selectedPlanId) {
-      Alert.alert("Vyber plán", "Nejdřív vyber svůj plán.");
-      return;
+  const addDay = () => setBuilderDays([...builderDays, { tempId: Math.random().toString(), day_of_week: 1, name: "", exercises: [] }]);
+  const addExercise = (dayIndex: number) => {
+    const newDays = [...builderDays];
+    newDays[dayIndex].exercises.push({ tempId: Math.random().toString(), exercise_id: "", exercise_name: "Vybrat cvik...", sets: "", reps: "", rpe: "", percentage: "", notes: "" });
+    setBuilderDays(newDays);
+  };
+  const updateExercise = (dayIndex: number, exIndex: number, field: keyof BuilderExercise, value: string) => {
+    const newDays = [...builderDays];
+    newDays[dayIndex].exercises[exIndex][field] = value;
+    setBuilderDays(newDays);
+  };
+
+  const openExerciseSearch = (dayIdx: number, exIdx: number) => {
+    setTargetDayIndex(dayIdx); setTargetExIndex(exIdx); setSearchQuery(""); setSearchResults([]); setIsSearchOpen(true);
+  };
+  const handleSearch = async (text: string) => {
+    setSearchQuery(text);
+    if (text.length > 0) {
+      const { data } = await supabase.from('exercises').select('id, name').ilike('name', `%${text}%`).limit(15);
+      if (data) setSearchResults(data);
+    } else { setSearchResults([]); }
+  };
+  const selectExercise = (id: string, name: string) => {
+    if (targetDayIndex !== null && targetExIndex !== null) {
+      const newDays = [...builderDays];
+      newDays[targetDayIndex].exercises[targetExIndex].exercise_id = id;
+      newDays[targetDayIndex].exercises[targetExIndex].exercise_name = name;
+      setBuilderDays(newDays);
     }
-    if (!scheduleStartDate.trim()) {
-      Alert.alert("Datum", "Vyplň start date ve formátu YYYY-MM-DD.");
-      return;
-    }
+    setIsSearchOpen(false);
+  };
+  const createAndSelectExercise = async (name: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const trimmedName = name.trim();
 
     try {
-      setScheduleError(null);
-      await createUserSchedule({
-        plan_id: selectedPlanId,
-        start_date: scheduleStartDate.trim(),
-        active: true,
-      });
+      // 1. Zkusíme znovu najít cvik (pro jistotu, kdyby tam už byl od jiného uživatele)
+      // Díky nové SELECT policy v Supabase už ho teď uvidíme.
+      let { data: existing } = await supabase
+        .from('exercises')
+        .select('id, name')
+        .ilike('name', trimmedName)
+        .maybeSingle();
+      
+      if (existing) {
+        console.log("Cvik už existuje, používám stávající ID:", existing.id);
+        selectExercise(existing.id, existing.name);
+        return;
+      }
 
-      const schedules = await fetchMyActiveSchedules();
-      setActiveSchedulesCount(schedules.length);
-      Alert.alert("Plán vložen do kalendáře", "Teď se objeví v 'Dnešním tréninku'.");
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "Nepodařilo se naplánovat.";
-      setScheduleError(message);
-      Alert.alert("Chyba", message);
+      // 2. Pokud opravdu neexistuje, vytvoříme nový
+      const { data: newEx, error } = await supabase
+        .from('exercises')
+        .insert({
+          name: trimmedName,
+          creator_id: user.id,
+          muscle_group: 'full_body'
+        })
+        .select()
+        .single();
+
+      // Pokud by náhodou insert selhal kvůli paralelnímu zápisu (Race condition)
+      if (error) {
+        if (error.code === '23505') { // Kód pro duplicate key
+           // Zkusíme ho znovu jen vyhledat
+           let { data: retryEx } = await supabase.from('exercises').select('id, name').ilike('name', trimmedName).single();
+           if (retryEx) return selectExercise(retryEx.id, retryEx.name);
+        }
+        throw error;
+      }
+      
+      selectExercise(newEx.id, newEx.name);
+    } catch (e: any) {
+      Alert.alert("Chyba při práci se cvikem", e.message);
     }
   };
 
-  const handleSubmit = async () => {
-    if (!plan.title.trim()) {
-      Alert.alert("Chybi nazev", "Vypln nejdriv nazev planu.");
-      return;
-    }
+  const handleSavePlan = async () => {
+    if (!planName.trim()) return Alert.alert("Chyba", "Zadej název plánu.");
+    if (builderDays.length === 0) return Alert.alert("Chyba", "Přidej alespoň jeden den.");
 
-    if (!plan.days[0]?.exercise_id.trim()) {
-      Alert.alert("Chybi cvik", "Vypln exercise_id pro prvni den.");
-      return;
-    }
-
+    setIsSaving(true);
     try {
-      await createWorkoutPlan.mutateAsync(plan);
-      Alert.alert("Plan ulozen", "Workout plan a plan_days byly odeslany do Supabase.");
-      setPlan(initialPlan);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Nepodarilo se ulozit plan.";
-      Alert.alert("Chyba pri ukladani", message);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Nejsi přihlášen");
+
+      let finalPlanId = editingPlanId;
+
+      // Pokud editujeme existující, upravíme název a smažeme staré dny (Cviky se smažou samy díky CASCADE)
+      if (editingPlanId) {
+        await supabase.from('workout_plans').update({ name: planName }).eq('id', editingPlanId);
+        await supabase.from('plan_days').delete().eq('plan_id', editingPlanId);
+      } else {
+        // Nový plán
+        const { data: planData, error: planErr } = await supabase.from('workout_plans').insert({ user_id: user.id, name: planName, is_active: plans.length === 0 }).select().single();
+        if (planErr) throw planErr;
+        finalPlanId = planData.id;
+      }
+
+      // 2. Projíždíme dny
+      for (const day of builderDays) {
+        const { data: dayData, error: dayErr } = await supabase
+          .from('plan_days')
+          .insert({ plan_id: finalPlanId, day_of_week: day.day_of_week, name: day.name })
+          .select().single();
+        if (dayErr) throw dayErr;
+
+        // 3. Projíždíme cviky ve dni
+        for (let i = 0; i < day.exercises.length; i++) {
+          const ex = day.exercises[i];
+          if (!ex.exercise_id) continue;
+          
+          await supabase.from('plan_exercises').insert({
+            plan_day_id: dayData.id,
+            exercise_id: ex.exercise_id,
+            sets: parseInt(ex.sets) || 0,
+            reps: parseInt(ex.reps) || 0,
+            rpe: parseFloat(ex.rpe) || null,
+            percentage: parseFloat(ex.percentage) || null,
+            notes: ex.notes,
+            sort_order: i
+          });
+        }
+      }
+
+      Alert.alert("Úspěch!", editingPlanId ? "Plán byl upraven." : "Plán byl vytvořen.");
+      
+      // RESET
+      setPlanName("");
+      setBuilderDays([]);
+      setEditingPlanId(null);
+      setViewMode('list');
+    } catch (e: any) {
+      Alert.alert("Chyba při ukládání", e.message);
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  return (
-    <ScreenContainer>
-      <View className="gap-2">
-        <Text className="text-3xl font-bold text-text">Tvorba plánu</Text>
-        <Text className="text-base leading-6 text-muted">
-          Jedna obrazovka pro jednorázový workout i více-týdenní cyklus.
-        </Text>
-      </View>
+  if (loading && viewMode === 'list') return <ActivityIndicator className="flex-1 bg-slate-900" color="#f97316" />;
 
-      <SectionCard
-        title="Detaily plánu"
-        subtitle="Tady se sbírá minimum dat, která pak uložíš do workout_plans."
-      >
-        <Field
-          label="Název"
-          placeholder="Např. Push Pull Legs"
-          value={plan.title}
-          onChangeText={(title) => setPlan((current) => ({ ...current, title }))}
-        />
-        <Field
-          label="Popis"
-          placeholder="Cíl, progresivní overload, poznámky..."
-          value={plan.description}
-          onChangeText={(description) =>
-            setPlan((current) => ({ ...current, description }))
-          }
-          multiline
-        />
-        <Field
-          label="Délka cyklu (týdny)"
-          value={String(plan.duration_weeks)}
-          onChangeText={(value) =>
-            setPlan((current) => ({
-              ...current,
-              duration_weeks: Number.parseInt(value || "1", 10),
-            }))
-          }
-          keyboardType="numeric"
-        />
-        <ToggleField
-          label="Veřejný plán"
-          description="Zapni, pokud chceš, aby se plán ukázal v komunitní knihovně."
-          value={plan.is_public}
-          onValueChange={(is_public) =>
-            setPlan((current) => ({ ...current, is_public }))
-          }
-        />
-      </SectionCard>
+  // ==========================================
+  // BUILDER VIEW
+  // ==========================================
+  if (viewMode === 'builder') {
+    return (
+      <View className="flex-1 bg-slate-900">
+        <ScrollView className="p-4" contentContainerStyle={{ paddingBottom: 100 }} keyboardShouldPersistTaps="handled">
+          <View className="flex-row justify-between items-center mb-6 mt-2">
+            <Text className="text-3xl font-bold text-white">{editingPlanId ? "Úprava plánu" : "Nový plán"}</Text>
+            <TouchableOpacity onPress={() => { setViewMode('list'); setEditingPlanId(null); setPlanName(""); setBuilderDays([]); }} className="bg-slate-800 px-4 py-2 rounded-lg">
+              <Text className="text-slate-300 font-bold">Zpět</Text>
+            </TouchableOpacity>
+          </View>
 
-      <SectionCard
-        title="Den 1"
-        subtitle="Ukázkový editor jednoho dne. Další dny můžeš přidat jako opakovatelné pole."
-      >
-        <View className="gap-2">
-          <Field
-            label="Vyhledat cvik"
-            placeholder="např. Bench Press"
-            value={exerciseSearchQuery}
-            onChangeText={setExerciseSearchQuery}
+          <TextInput
+            placeholder="Název plánu (např. Silový blok Jaro)"
+            placeholderTextColor="#64748b"
+            value={planName}
+            onChangeText={setPlanName}
+            className="bg-slate-800 text-white p-4 rounded-xl text-lg font-bold mb-6 border border-slate-700"
           />
-          <Button
-            variant="secondary"
-            disabled={isSearchingExercises}
-            onPress={() => void handleSearchExercises()}
-          >
-            {isSearchingExercises ? "Hledám..." : "Najít cvik"}
-          </Button>
 
-          {exerciseSearchResults.length > 0 ? (
-            <View className="gap-2">
-              {exerciseSearchResults.map((ex) => (
-                <Pressable
-                  key={ex.id}
-                  onPress={() => {
-                    updateFirstDay("exercise_id", ex.id);
-                    setExerciseSearchResults([]);
+          {builderDays.map((day, dIdx) => (
+            <View key={day.tempId} className="bg-slate-800/80 p-4 rounded-xl mb-6 border border-slate-700">
+              <View className="flex-row justify-between items-center mb-4">
+                <Text className="text-xl font-bold text-white">Den {dIdx + 1}</Text>
+                <TouchableOpacity onPress={() => setBuilderDays(builderDays.filter((_, i) => i !== dIdx))}>
+                  <Text className="text-red-500 font-bold">Smazat den</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View className="flex-row gap-2 mb-4">
+                <TextInput
+                  placeholder="Název dne (např. Těžké Nohy)"
+                  placeholderTextColor="#64748b"
+                  value={day.name}
+                  onChangeText={(val) => {
+                    const newDays = [...builderDays];
+                    newDays[dIdx].name = val;
+                    setBuilderDays(newDays);
                   }}
-                  className="rounded-2xl border border-border bg-surface px-4 py-3"
-                >
-                  <Text className="text-sm font-semibold text-text">
-                    {ex.name}
-                  </Text>
-                  <Text className="text-xs text-muted">{ex.id}</Text>
-                </Pressable>
+                  className="flex-1 bg-slate-900 text-white p-3 rounded-lg border border-slate-600"
+                />
+              </View>
+
+              <Text className="text-slate-400 mb-2 font-semibold">Kdy se to cvičí?</Text>
+              <View className="flex-row justify-between mb-6">
+                {DAYS_OF_WEEK.map((d, i) => (
+                  <TouchableOpacity
+                    key={d}
+                    onPress={() => {
+                      const newDays = [...builderDays];
+                      newDays[dIdx].day_of_week = i + 1;
+                      setBuilderDays(newDays);
+                    }}
+                    className={`w-10 h-10 items-center justify-center rounded-full ${day.day_of_week === i + 1 ? 'bg-orange-500' : 'bg-slate-900 border border-slate-700'}`}
+                  >
+                    <Text className={`font-bold ${day.day_of_week === i + 1 ? 'text-white' : 'text-slate-400'}`}>{d}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {day.exercises.map((ex, eIdx) => (
+                <View key={ex.tempId} className="bg-slate-900 p-3 rounded-lg mb-3 border border-slate-700">
+                  <View className="flex-row justify-between items-center mb-2">
+                    <TouchableOpacity onPress={() => openExerciseSearch(dIdx, eIdx)} className="flex-1 bg-slate-800 p-3 rounded-lg border border-slate-600 mr-2 flex-row justify-between items-center">
+                      <Text className={ex.exercise_id ? "text-white font-bold" : "text-orange-400 font-bold"}>{ex.exercise_name}</Text>
+                      <Text className="text-slate-500 text-xs">Změnit ✏️</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => {
+                      const newDays = [...builderDays];
+                      newDays[dIdx].exercises = newDays[dIdx].exercises.filter((_, i) => i !== eIdx);
+                      setBuilderDays(newDays);
+                    }}>
+                      <Text className="text-red-500 text-xl font-bold px-2">×</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View className="flex-row gap-2 mb-2 mt-1">
+                    <TextInput placeholder="Série" placeholderTextColor="#64748b" keyboardType="numeric" value={ex.sets} onChangeText={(v) => updateExercise(dIdx, eIdx, 'sets', v)} className="flex-1 bg-slate-800 text-white p-2 rounded-lg text-center border border-slate-700" />
+                    <Text className="text-slate-500 self-center font-bold">x</Text>
+                    <TextInput placeholder="Opak." placeholderTextColor="#64748b" keyboardType="numeric" value={ex.reps} onChangeText={(v) => updateExercise(dIdx, eIdx, 'reps', v)} className="flex-1 bg-slate-800 text-white p-2 rounded-lg text-center border border-slate-700" />
+                    <TextInput placeholder="RPE" placeholderTextColor="#64748b" keyboardType="numeric" value={ex.rpe} onChangeText={(v) => updateExercise(dIdx, eIdx, 'rpe', v)} className="flex-1 bg-slate-800 text-white p-2 rounded-lg text-center border border-slate-700" />
+                    <TextInput placeholder="% Max" placeholderTextColor="#64748b" keyboardType="numeric" value={ex.percentage} onChangeText={(v) => updateExercise(dIdx, eIdx, 'percentage', v)} className="flex-1 bg-slate-800 text-white p-2 rounded-lg text-center border border-slate-700" />
+                  </View>
+{/* TRVALÁ INSTRUKCE K PLÁNU */}
+<View className="mt-1">
+  <Text className="text-slate-500 text-[10px] uppercase font-bold mb-1 ml-1">Trvalá instrukce (technika, tempo...)</Text>
+  <TextInput 
+    placeholder="Např. Kontrolovaný pohyb dolů, pauza 2s..." 
+    placeholderTextColor="#475569" 
+    value={ex.notes} 
+    onChangeText={(v) => updateExercise(dIdx, eIdx, 'notes', v)} 
+    className="bg-slate-800 text-white p-3 rounded-lg border border-slate-700" 
+  />
+</View>                </View>
               ))}
+
+               <TouchableOpacity onPress={() => addExercise(dIdx)} className="bg-slate-700 py-3 rounded-lg items-center border border-slate-600 border-dashed mt-2">
+                <Text className="text-white font-bold">+ Přidat cvik</Text>
+              </TouchableOpacity>
             </View>
-          ) : null}
+          ))}
+
+          <TouchableOpacity onPress={addDay} className="bg-slate-800 py-4 rounded-xl items-center border-2 border-slate-700 border-dashed mb-8">
+            <Text className="text-orange-400 font-bold text-lg">+ Přidat tréninkový den</Text>
+          </TouchableOpacity>
+
+        </ScrollView>
+
+        <View className="absolute bottom-0 left-0 right-0 p-4 bg-slate-900 border-t border-slate-800">
+          <TouchableOpacity onPress={handleSavePlan} disabled={isSaving} className={`py-4 rounded-xl items-center ${isSaving ? 'bg-orange-800' : 'bg-orange-500'}`}>
+            <Text className="text-white font-bold text-xl">{isSaving ? "Ukládám..." : "Uložit celou šablonu"}</Text>
+          </TouchableOpacity>
         </View>
 
-        <Field
-          label="Exercise ID (fallback)"
-          placeholder="UUID cviku ze Supabase"
-          value={plan.days[0]?.exercise_id ?? ""}
-          onChangeText={(value) => updateFirstDay("exercise_id", value)}
-        />
-        <Field
-          label="Počet sérií"
-          value={String(plan.days[0]?.sets ?? 0)}
-          onChangeText={(value) => updateFirstDay("sets", value)}
-          keyboardType="numeric"
-        />
-        <Field
-          label="Počet opakování"
-          value={String(plan.days[0]?.reps ?? 0)}
-          onChangeText={(value) => updateFirstDay("reps", value)}
-          keyboardType="numeric"
-        />
-        <Field
-          label="Váha (kg)"
-          value={String(plan.days[0]?.weight ?? 0)}
-          onChangeText={(value) => updateFirstDay("weight", value)}
-          keyboardType="numeric"
-        />
-      </SectionCard>
+        {/* MODAL PRO HLEDÁNÍ / VYTVÁŘENÍ CVIKŮ */}
+        <Modal visible={isSearchOpen} animationType="slide" transparent={true}>
+          <View className="flex-1 bg-slate-900/95 justify-center p-4 pt-12">
+            <View className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex-1 mb-8">
+              <View className="flex-row justify-between items-center mb-4">
+                <Text className="text-xl font-bold text-white">Zvol nebo vytvoř cvik</Text>
+                <TouchableOpacity onPress={() => setIsSearchOpen(false)}><Text className="text-red-500 font-bold text-lg">Zavřít</Text></TouchableOpacity>
+              </View>
+              
+              <TextInput 
+                autoFocus 
+                placeholder="Napiš název cviku..." 
+                placeholderTextColor="#64748b" 
+                value={searchQuery} 
+                onChangeText={handleSearch} 
+                className="bg-slate-900 text-white p-4 rounded-lg border border-slate-600 mb-4 text-lg" 
+              />
+              
+              <ScrollView keyboardShouldPersistTaps="handled">
+                {searchResults.map(ex => (
+                  <TouchableOpacity 
+                    key={ex.id} 
+                    onPress={() => selectExercise(ex.id, ex.name)} 
+                    className="bg-slate-700 p-4 rounded-lg mb-2 flex-row justify-between items-center"
+                  >
+                    <Text className="text-white font-bold text-lg">{ex.name}</Text>
+                    <Text className="text-slate-400 text-sm">Vybrat ➔</Text>
+                  </TouchableOpacity>
+                ))}
+                
+                {searchQuery.length > 0 && !searchResults.some(ex => ex.name.toLowerCase() === searchQuery.trim().toLowerCase()) && (
+                  <TouchableOpacity 
+                    onPress={() => createAndSelectExercise(searchQuery)} 
+                    className="bg-orange-500 p-4 rounded-lg mt-2 flex-row justify-between items-center shadow-lg shadow-orange-500/20"
+                  >
+                    <Text className="text-white font-bold text-lg">Vytvořit "{searchQuery.trim()}"</Text>
+                    <Text className="text-white font-bold text-2xl">+</Text>
+                  </TouchableOpacity>
+                )}
 
-      <SectionCard title="Naplánovat workout" subtitle="Vloží plán do kalendáře.">
-        {scheduleError ? (
-          <Text className="text-sm leading-6 text-red-200">{scheduleError}</Text>
-        ) : null}
-
-        <Text className="text-sm leading-6 text-text">
-          Aktivní plánované tréninky: {activeSchedulesCount}
-        </Text>
-
-        <View className="gap-3">
-          <Field
-            label="Start date (YYYY-MM-DD)"
-            value={scheduleStartDate}
-            onChangeText={setScheduleStartDate}
-          />
-
-          <Text className="text-sm font-semibold text-text">Vybraný plán</Text>
-
-          {isLoadingMyPlans ? (
-            <Text className="text-sm text-muted">Načítám tvoje plány...</Text>
-          ) : myPlans.length === 0 ? (
-            <Text className="text-sm text-muted">
-              Zatím nemáš žádné plány. Nejprve vytvoř plán nahoře.
-            </Text>
-          ) : (
-            <View className="gap-2">
-              {myPlans.slice(0, 8).map((p) => (
-                <Pressable
-                  key={p.id}
-                  onPress={() => setSelectedPlanId(p.id)}
-                  className={`rounded-2xl border px-4 py-3 ${
-                    selectedPlanId === p.id
-                      ? "border-primary"
-                      : "border-border bg-surface"
-                  }`}
-                >
-                  <Text className="text-sm font-semibold text-text">{p.title}</Text>
-                </Pressable>
-              ))}
+                {searchQuery.length === 0 && (
+                  <Text className="text-slate-500 text-center mt-8 italic">Začni psát název cviku nahoře...</Text>
+                )}
+              </ScrollView>
             </View>
-          )}
+          </View>
+        </Modal>
+      </View>
+    );
+  }
 
-          <Button
-            onPress={() => void handleCreateSchedule()}
-            disabled={myPlans.length === 0 || !selectedPlanId}
-          >
-            Vytvořit v kalendáři
-          </Button>
-        </View>
-      </SectionCard>
+  // ==========================================
+  // ZÁKLADNÍ VIEW
+  // ==========================================
+  return (
+    <ScrollView className="flex-1 bg-slate-900 p-4">
+      <Text className="text-3xl font-bold text-white mb-6 mt-2">Moje Plány</Text>
 
-      <Button onPress={() => void handleSubmit()}>
-        {createWorkoutPlan.isPending ? "Ukladam..." : "Ulozit plan"}
-      </Button>
-    </ScreenContainer>
+      <TouchableOpacity onPress={() => { setViewMode('builder'); setEditingPlanId(null); setPlanName(""); setBuilderDays([]); }} className="bg-orange-500 p-4 rounded-xl mb-8 items-center flex-row justify-center gap-2 shadow-lg">
+        <Text className="text-white font-bold text-xl">+</Text>
+        <Text className="text-white font-bold text-lg">Vytvořit nový plán</Text>
+      </TouchableOpacity>
+
+      <Text className="text-xl font-bold text-slate-300 mb-4">Uložené šablony</Text>
+      
+      {plans.length === 0 ? (
+        <Text className="text-slate-500 italic text-center mt-4">Zatím nemáš žádné plány.</Text>
+      ) : (
+        plans.map((plan) => (
+          <View key={plan.id} className={`p-4 rounded-xl mb-4 border ${plan.is_active ? 'bg-orange-500/10 border-orange-500' : 'bg-slate-800 border-slate-700'}`}>
+            <View className="flex-row justify-between items-center mb-4">
+              <Text className="text-xl font-bold text-white flex-1">{plan.name}</Text>
+              {plan.is_active && (
+                <View className="bg-orange-500 px-2 py-1 rounded-md ml-2">
+                  <Text className="text-white text-xs font-bold uppercase">Aktivní</Text>
+                </View>
+              )}
+            </View>
+
+            <View className="flex-row justify-between items-center">
+              <View className="flex-row gap-2">
+                {!plan.is_active && (
+                  <TouchableOpacity className="bg-slate-700 px-4 py-2 rounded-lg" onPress={() => handleSetActive(plan.id)}>
+                    <Text className="text-white font-semibold">Zvolit</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity className="bg-slate-700 px-4 py-2 rounded-lg" onPress={() => handleEditPlan(plan.id)}>
+                    <Text className="text-white font-semibold">Upravit</Text>
+                </TouchableOpacity>
+              </View>
+              
+            <Pressable 
+  onPress={() => handleDeletePlan(plan.id)}
+  style={({ pressed }) => ({
+    backgroundColor: pressed ? 'rgba(239, 68, 68, 0.4)' : 'rgba(239, 68, 68, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  })}
+>
+  <Text className="text-red-500 font-bold">Smazat</Text>
+</Pressable>
+            </View>
+          </View>
+        ))
+      )}
+    </ScrollView>
   );
 }

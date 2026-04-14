@@ -1,413 +1,260 @@
-import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Text, View } from "react-native";
-
-import { ScreenContainer } from "@/components/screen-container";
-import { SectionCard } from "@/components/section-card";
-import { useAuth } from "@/hooks/useAuth";
-import { Button, Field } from "@/components/ui";
+import { useState, useEffect, useMemo } from "react";
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput } from "react-native";
 import { supabase } from "@/lib/supabase";
-import { fetchMyActiveSchedules, type ScheduledPlan } from "@/lib/schedule";
-import { logWorkout } from "@/lib/workout-logs";
+import { ScreenContainer } from "@/components/screen-container";
+import { RestTimer } from "@/components/RestTimer";
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-function toUTCDateOnly(date: Date) {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-}
-
-function utcMidnightFromDateString(yyyyMmDd: string) {
-  const [y, m, d] = yyyyMmDd.split("-").map((v) => Number.parseInt(v, 10));
-  return new Date(Date.UTC(y, m - 1, d));
-}
-
-function formatDate(isoOrDateString: string | Date) {
-  const date = typeof isoOrDateString === "string" ? new Date(isoOrDateString) : isoOrDateString;
-  return date.toLocaleDateString("cs-CZ");
-}
+const DAYS_NAMES = ["Ne", "Po", "Út", "St", "Čt", "Pá", "So"];
 
 export default function HomeScreen() {
-  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [activePlan, setActivePlan] = useState<any>(null);
+  const [todayWorkout, setTodayWorkout] = useState<any>(null);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [completedDates, setCompletedDates] = useState<string[]>([]);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [sessionExercises, setSessionExercises] = useState<any[]>([]);
 
-  const [schedules, setSchedules] = useState<ScheduledPlan[]>([]);
-  const [isLoadingSchedules, setIsLoadingSchedules] = useState(true);
-  const [schedulesError, setSchedulesError] = useState<string | null>(null);
+  // --- STATE PRO REST TIMER ---
+  const [showTimer, setShowTimer] = useState(false);
+  const [timerDuration, setTimerDuration] = useState(90);
 
-  const [recentLogs, setRecentLogs] = useState<
-    Array<{
-      id: string;
-      exercise_id: string;
-      exercise_name: string | null;
-      weight_lifted: number;
-      reps_done: number;
-      date: string;
-    }>
-  >([]);
-  const [isLoadingRecent, setIsLoadingRecent] = useState(true);
+  const fetchData = async () => {
+    setLoading(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-  type Draft = { sets: string; reps: string; weight: string };
-  const [logDrafts, setLogDrafts] = useState<Record<string, Draft>>({});
+    const { data: plan } = await supabase
+      .from('workout_plans')
+      .select('*, plan_days(*, plan_exercises(*, exercises(name)))')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .maybeSingle();
 
-  useEffect(() => {
-    let isMounted = true;
+    setActivePlan(plan);
 
-    const load = async () => {
-      try {
-        setIsLoadingSchedules(true);
-        setSchedulesError(null);
-        const data = await fetchMyActiveSchedules();
-        if (!isMounted) return;
-        setSchedules(data);
-      } catch (e) {
-        const message = e instanceof Error ? e.message : "Nepodařilo se načíst plán.";
-        if (!isMounted) return;
-        setSchedulesError(message);
-      } finally {
-        if (!isMounted) return;
-        setIsLoadingSchedules(false);
-      }
-    };
+    const { data: logs } = await supabase.from('workout_logs').select('date').eq('user_id', user.id);
 
-    const loadRecent = async () => {
-      try {
-        setIsLoadingRecent(true);
-        const { data: logs, error } = await supabase
-          .from("workout_logs")
-          .select("id,exercise_id,weight_lifted,reps_done,date")
-          .order("date", { ascending: false })
-          .limit(5);
-
-        if (error) throw error;
-        const list = (logs ?? []) as Array<{
-          id: string;
-          exercise_id: string;
-          weight_lifted: number;
-          reps_done: number;
-          date: string;
-        }>;
-
-        const exerciseIds = Array.from(new Set(list.map((l) => l.exercise_id)));
-        const { data: exercises, error: exError } = await supabase
-          .from("exercises")
-          .select("id,name")
-          .in("id", exerciseIds);
-        if (exError) throw exError;
-
-        const exerciseNameById = new Map(
-          (exercises ?? []).map((ex) => [ex.id as string, (ex.name as string) ?? null]),
-        );
-
-        const hydrated = list.map((l) => ({
-          ...l,
-          exercise_name: exerciseNameById.get(l.exercise_id) ?? null,
-        }));
-        if (!isMounted) return;
-        setRecentLogs(hydrated);
-      } catch {
-        // Ticho: neblokuj zbytek UI jen kvůli recent logům.
-      } finally {
-        if (!isMounted) return;
-        setIsLoadingRecent(false);
-      }
-    };
-
-    void load();
-    void loadRecent();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [user?.id]);
-
-  const todayWorkout = useMemo(() => {
-    const utcToday = toUTCDateOnly(new Date());
-
-    for (const schedule of schedules) {
-      const scheduleStart = utcMidnightFromDateString(schedule.start_date);
-      const diffDays = Math.floor((utcToday.getTime() - scheduleStart.getTime()) / MS_PER_DAY);
-      if (diffDays < 0) continue;
-
-      const dayNumber = diffDays + 1;
-      const matches = schedule.days.filter((d) => d.day_number === dayNumber);
-      if (matches.length > 0) {
-        return { schedule, days: matches };
-      }
+    if (logs) {
+      const dates = logs.map(l => new Date(l.date).toISOString().split('T')[0]);
+      setCompletedDates([...new Set(dates)]);
     }
 
-    return null;
-  }, [schedules]);
-
-  useEffect(() => {
-    if (!todayWorkout) return;
-    const next: Record<string, Draft> = {};
-    for (const d of todayWorkout.days) {
-      next[d.exercise_id] = {
-        sets: String(d.sets ?? 1),
-        reps: String(d.reps ?? 1),
-        weight: String(d.weight ?? 0),
-      };
-    }
-    setLogDrafts(next);
-  }, [todayWorkout]);
-
-  const upcoming = useMemo(() => {
-    if (schedules.length === 0) return [];
-    const utcToday = toUTCDateOnly(new Date());
-    const items: Array<{
-      date: Date;
-      plan_title: string;
-      exercise_name: string | null;
-      sets: number;
-      reps: number;
-      weight: number;
-    }> = [];
-
-    for (let offset = 0; offset < 14; offset++) {
-      const date = new Date(utcToday.getTime() + offset * MS_PER_DAY);
-      let found: (typeof items)[number] | null = null;
-
-      for (const schedule of schedules) {
-        const scheduleStart = utcMidnightFromDateString(schedule.start_date);
-        const diffDays = Math.floor((date.getTime() - scheduleStart.getTime()) / MS_PER_DAY);
-        if (diffDays < 0) continue;
-        const dayNumber = diffDays + 1;
-        const match = schedule.days.find((d) => d.day_number === dayNumber);
-        if (!match) continue;
-
-        found = {
-          date,
-          plan_title: schedule.plan_title,
-          exercise_name: match.exercise_name,
-          sets: match.sets,
-          reps: match.reps,
-          weight: match.weight,
-        };
-        break;
-      }
-
-      if (found) items.push(found);
-      if (items.length >= 5) break;
-    }
-
-    return items;
-  }, [schedules]);
-
-  const handleLog = async () => {
-    if (!todayWorkout) return;
-
-    try {
-      // Logujeme všechny cviky pro dnešní `day_number`.
-      for (const d of todayWorkout.days) {
-        const draft = logDrafts[d.exercise_id];
-        const sets = Number.parseInt(draft?.sets ?? "0", 10);
-        const reps = Number.parseInt(draft?.reps ?? "0", 10);
-        const weight = Number.parseFloat(draft?.weight ?? "0");
-
-        if (!Number.isFinite(sets) || sets <= 0) {
-          Alert.alert("Chyba", `Vyplň počet sérií pro ${d.exercise_name ?? "cvičení"}.`);
-          return;
-        }
-        if (!Number.isFinite(reps) || reps <= 0) {
-          Alert.alert("Chyba", `Vyplň počet opakování v sérii pro ${d.exercise_name ?? "cvičení"}.`);
-          return;
-        }
-        if (!Number.isFinite(weight) || weight < 0) {
-          Alert.alert("Chyba", `Vyplň váhu (kg) pro ${d.exercise_name ?? "cvičení"}.`);
-          return;
-        }
-
-        await logWorkout({
-          exercise_id: d.exercise_id,
-          sets,
-          reps,
-          weight,
-          date: new Date(),
-        });
-      }
-
-      Alert.alert("Hotovo", "Workout byl uložen.");
-      // Refresh recent logs
-      const { data: logs } = await supabase
-        .from("workout_logs")
-        .select("id,exercise_id,weight_lifted,reps_done,date")
-        .order("date", { ascending: false })
-        .limit(5);
-      const list = (logs ?? []) as Array<{
-        id: string;
-        exercise_id: string;
-        weight_lifted: number;
-        reps_done: number;
-        date: string;
-      }>;
-      const exerciseIds = Array.from(new Set(list.map((l) => l.exercise_id)));
-      const { data: exercises } = await supabase
-        .from("exercises")
-        .select("id,name")
-        .in("id", exerciseIds);
-      const exerciseNameById = new Map(
-        (exercises ?? []).map((ex) => [ex.id as string, (ex.name as string) ?? null]),
-      );
-      setRecentLogs(
-        list.map((l) => ({
-          ...l,
-          exercise_name: exerciseNameById.get(l.exercise_id) ?? null,
-        })),
-      );
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "Nepodařilo se uložit workout.";
-      Alert.alert("Chyba", message);
-    }
+    if (plan) updateTodayWorkout(plan, selectedDate);
+    setLoading(false);
   };
+
+  const updateTodayWorkout = (plan: any, date: Date) => {
+    let dayNum = date.getDay();
+    dayNum = dayNum === 0 ? 7 : dayNum;
+    const dayMatch = plan.plan_days.find((d: any) => d.day_of_week === dayNum);
+    setTodayWorkout(dayMatch || null);
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
+  const handleDateSelect = (date: Date) => {
+    setSelectedDate(date);
+    if (activePlan) updateTodayWorkout(activePlan, date);
+  };
+
+  const startWorkout = async () => {
+    if (!todayWorkout) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    const dateStr = selectedDate.toISOString().split('T')[0];
+
+    const { data: existingLogs } = await supabase
+      .from('workout_logs')
+      .select('*')
+      .eq('user_id', user?.id)
+      .gte('date', `${dateStr}T00:00:00`)
+      .lte('date', `${dateStr}T23:59:59`);
+
+    const items = todayWorkout.plan_exercises.map((pe: any) => {
+      const log = existingLogs?.find(l => l.exercise_id === pe.exercise_id);
+      return {
+        ...pe,
+        done: !!log,
+        actual_weight: log ? log.weight_lifted.toString() : "",
+        actual_reps: log ? log.reps_done.toString() : pe.reps.toString(),
+        actual_rpe: log ? (log.rpe?.toString() || "") : (pe.rpe?.toString() || ""),
+        actual_notes: log ? (log.notes || "") : ""
+      };
+    });
+    setSessionExercises(items);
+    setIsExecuting(true);
+  };
+
+  const saveWorkoutSession = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    try {
+      const dateStr = selectedDate.toISOString().split('T')[0];
+      await supabase.from('workout_logs').delete().eq('user_id', user.id).gte('date', `${dateStr}T00:00:00`).lte('date', `${dateStr}T23:59:59`);
+
+      const logs = sessionExercises.filter(ex => ex.done).map(ex => ({
+        user_id: user.id, exercise_id: ex.exercise_id, weight_lifted: parseFloat(ex.actual_weight.replace(',', '.')) || 0,
+        reps_done: parseInt(ex.actual_reps) || 0, rpe: ex.actual_rpe ? parseFloat(ex.actual_rpe.replace(',', '.')) : null,
+        notes: ex.actual_notes || null, date: selectedDate.toISOString()
+      }));
+
+      if (logs.length > 0) {
+        await supabase.from('workout_logs').insert(logs);
+      }
+      setIsExecuting(false);
+      setShowTimer(false);
+      fetchData();
+    } catch (e: any) { Alert.alert("Chyba", e.message); }
+  };
+
+  const calendarDays = useMemo(() => {
+    const days = [];
+    for (let i = -3; i <= 3; i++) {
+      const d = new Date();
+      d.setDate(new Date().getDate() + i);
+      days.push(d);
+    }
+    return days;
+  }, []);
+
+  if (loading) return <ActivityIndicator className="flex-1 bg-slate-900" color="#f97316" />;
 
   return (
     <ScreenContainer>
-      <View className="gap-2">
-        <Text className="text-4xl font-bold text-text">Bonfire</Text>
-        <Text className="text-base leading-6 text-muted">
-          {user ? `Přihlášený: ${user.email}` : "Přihlášený uživatel"}
-        </Text>
+      <View className="mb-6">
+        <Text className="text-3xl font-bold text-white">Bonfire 🔥</Text>
+        <Text className="text-slate-400">Tvůj tréninkový přehled</Text>
       </View>
 
-      <SectionCard
-        title="Dnešní trénink"
-        subtitle="Vyplň odjeté série a ulož."
-      >
-        {isLoadingSchedules ? (
-          <View className="items-center py-6">
-            <ActivityIndicator size="large" color="#f97316" />
-          </View>
-        ) : schedulesError ? (
-          <Text className="text-sm leading-6 text-red-200">{schedulesError}</Text>
-        ) : todayWorkout ? (
-          <View className="gap-4">
-            <View className="gap-1">
-              <Text className="text-sm font-semibold text-text">
-                {todayWorkout.schedule.plan_title}
-              </Text>
-              <Text className="text-sm leading-6 text-muted">
-                Dnešní cyklus: den {todayWorkout.days[0]?.day_number}
-              </Text>
-            </View>
+      {/* KALENDÁŘ */}
+      <View className="flex-row justify-between mb-8 bg-slate-800 p-2 rounded-2xl">
+        {calendarDays.map((date, i) => {
+          const isSelected = date.toDateString() === selectedDate.toDateString();
+          const dateISO = date.toISOString().split('T')[0];
+          let dayOfWeek = date.getDay();
+          dayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek;
+          const isPlanned = activePlan?.plan_days?.some((d: any) => d.day_of_week === dayOfWeek);
+          const isDone = completedDates.includes(dateISO);
 
-            <View className="gap-3">
-              {todayWorkout.days.map((d) => (
-                <View
-                  key={d.exercise_id}
-                  className="rounded-2xl border border-border bg-card px-4 py-3"
-                >
-                  <Text className="text-sm font-semibold text-text">
-                    {d.exercise_name ?? "Cvik"}
-                  </Text>
-                  <View className="gap-2 pt-2">
-                    <Field
-                      label="Počet sérií"
-                      value={logDrafts[d.exercise_id]?.sets ?? String(d.sets ?? 1)}
-                      onChangeText={(v) =>
-                        setLogDrafts((cur) => ({
-                          ...cur,
-                          [d.exercise_id]: {
-                            sets: v,
-                            reps: cur[d.exercise_id]?.reps ?? String(d.reps ?? 1),
-                            weight:
-                              cur[d.exercise_id]?.weight ??
-                              String(d.weight ?? 0),
-                          },
-                        }))
-                      }
-                      keyboardType="numeric"
-                    />
-                    <Field
-                      label="Opakování v sérii"
-                      value={logDrafts[d.exercise_id]?.reps ?? String(d.reps ?? 1)}
-                      onChangeText={(v) =>
-                        setLogDrafts((cur) => ({
-                          ...cur,
-                          [d.exercise_id]: {
-                            sets: cur[d.exercise_id]?.sets ?? String(d.sets ?? 1),
-                            reps: v,
-                            weight:
-                              cur[d.exercise_id]?.weight ??
-                              String(d.weight ?? 0),
-                          },
-                        }))
-                      }
-                      keyboardType="numeric"
-                    />
-                    <Field
-                      label="Váha (kg)"
-                      value={
-                        logDrafts[d.exercise_id]?.weight ?? String(d.weight ?? 0)
-                      }
-                      onChangeText={(v) =>
-                        setLogDrafts((cur) => ({
-                          ...cur,
-                          [d.exercise_id]: {
-                            sets: cur[d.exercise_id]?.sets ?? String(d.sets ?? 1),
-                            reps: cur[d.exercise_id]?.reps ?? String(d.reps ?? 1),
-                            weight: v,
-                          },
-                        }))
-                      }
-                      keyboardType="numeric"
-                    />
+          return (
+            <TouchableOpacity key={i} onPress={() => handleDateSelect(date)} className={`items-center p-3 rounded-xl ${isSelected ? 'bg-orange-500' : ''}`}>
+              <Text className={`text-xs ${isSelected ? 'text-white' : 'text-slate-500'}`}>{DAYS_NAMES[date.getDay()]}</Text>
+              <Text className={`text-lg font-bold ${isSelected ? 'text-white' : (isDone ? 'text-green-400' : (isPlanned ? 'text-orange-400' : 'text-slate-300'))}`}>{date.getDate()}</Text>
+              <View className={`w-1.5 h-1.5 rounded-full mt-1 ${isDone ? 'bg-green-500' : (isPlanned ? (isSelected ? 'bg-white' : 'bg-orange-500') : 'bg-transparent')}`} />
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* HLAVNÍ KARTA TRÉNINKU */}
+      <View className="bg-slate-800 p-5 rounded-3xl border border-slate-700 shadow-xl">
+        {activePlan ? (
+          todayWorkout ? (
+            <View>
+              <Text className="text-orange-500 font-bold uppercase tracking-widest text-[10px] mb-1">
+                {completedDates.includes(selectedDate.toISOString().split('T')[0]) ? "✓ DOKONČENO" : "NAPLÁNOVÁNO"}
+              </Text>
+              <Text className="text-2xl font-bold text-white mb-4">{todayWorkout.name}</Text>
+              <TouchableOpacity onPress={startWorkout} className={`p-4 rounded-2xl mt-6 items-center ${completedDates.includes(selectedDate.toISOString().split('T')[0]) ? 'bg-slate-700 border border-green-500' : 'bg-orange-500'}`}>
+                <Text className="text-white font-bold text-lg">{completedDates.includes(selectedDate.toISOString().split('T')[0]) ? "UPRAVIT ZÁZNAM" : "ZAČÍT CVIČIT"}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View className="items-center py-4"><Text className="text-slate-400 italic text-lg text-center">Dnes nemáš nic v plánu. 🧘</Text></View>
+          )
+        ) : (
+          <View className="items-center py-4"><Text className="text-white font-bold">Nemáš aktivní plán.</Text></View>
+        )}
+      </View>
+
+      {/* MODAL TRÉNINKU */}
+      <Modal visible={isExecuting} animationType="slide">
+        <View className="flex-1 bg-slate-900">
+          
+          {/* HEADER MODALU S TLAČÍTKEM PRO TIMER */}
+          <View className="p-6 pt-12 bg-slate-800 flex-row justify-between items-center border-b border-slate-700">
+            <View className="flex-1">
+              <Text className="text-white text-xl font-bold" numberOfLines={1}>{todayWorkout?.name}</Text>
+              <Text className="text-orange-500 font-bold">{selectedDate.toLocaleDateString('cs-CZ')}</Text>
+            </View>
+            
+            <View className="flex-row items-center gap-3">
+              {/* --- NOVÉ TLAČÍTKO PRO RUČNÍ SPUŠTĚNÍ TIMERU --- */}
+              <TouchableOpacity 
+                onPress={() => { setShowTimer(false); setTimeout(() => setShowTimer(true), 50); }}
+                className="bg-orange-500/20 border border-orange-500 px-3 py-2 rounded-xl flex-row items-center"
+              >
+                <Text className="text-orange-500 font-bold mr-1 text-xs">⏱️ PAUZA</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={() => { setIsExecuting(false); setShowTimer(false); }} className="bg-slate-700 h-10 w-10 rounded-full items-center justify-center">
+                <Text className="text-white font-bold text-lg">×</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <ScrollView className="p-4" contentContainerStyle={{ paddingBottom: 300 }}>
+            {sessionExercises.map((ex, idx) => (
+              <View key={idx} className={`mb-6 p-4 rounded-2xl border ${ex.done ? 'bg-green-900/10 border-green-500/50' : 'bg-slate-800 border-slate-700'}`}>
+                <View className="flex-row justify-between items-center mb-3">
+                  <Text className="text-xl font-bold text-white flex-1">{ex.exercises.name}</Text>
+                  <TouchableOpacity 
+                    onPress={() => {
+                      const next = [...sessionExercises];
+                      const isNowDone = !next[idx].done;
+                      next[idx].done = isNowDone;
+                      setSessionExercises(next);
+                      if (isNowDone) { setShowTimer(false); setTimeout(() => setShowTimer(true), 50); }
+                    }}
+                    className={`w-10 h-10 rounded-xl items-center justify-center border ${ex.done ? 'bg-green-500 border-green-500' : 'border-slate-600 bg-slate-900'}`}
+                  >
+                    {ex.done && <Text className="text-white font-bold text-xl">✓</Text>}
+                  </TouchableOpacity>
+                </View>
+
+                <View className="flex-row gap-2">
+                  <View className="flex-1">
+                    <Text className="text-slate-500 text-[10px] font-bold mb-1 uppercase tracking-tighter">Váha (kg)</Text>
+                    <TextInput keyboardType="numeric" value={ex.actual_weight} onChangeText={(v) => { const next = [...sessionExercises]; next[idx].actual_weight = v; setSessionExercises(next); }} className="bg-slate-900 text-white p-3 rounded-xl border border-slate-700" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-slate-500 text-[10px] font-bold mb-1 uppercase tracking-tighter">Opak.</Text>
+                    <TextInput keyboardType="numeric" value={ex.actual_reps} onChangeText={(v) => { const next = [...sessionExercises]; next[idx].actual_reps = v; setSessionExercises(next); }} className="bg-slate-900 text-white p-3 rounded-xl border border-slate-700" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-slate-500 text-[10px] font-bold mb-1 uppercase tracking-tighter">RPE</Text>
+                    <TextInput keyboardType="numeric" value={ex.actual_rpe} onChangeText={(v) => { const next = [...sessionExercises]; next[idx].actual_rpe = v; setSessionExercises(next); }} className="bg-slate-900 text-white p-3 rounded-xl border border-slate-700" />
                   </View>
                 </View>
-              ))}
+              </View>
+            ))}
+          </ScrollView>
+
+          {/* --- REST TIMER (VYNUCENÁ POZICE) --- */}
+          {showTimer && (
+            <View 
+              style={{ 
+                position: 'absolute', 
+                bottom: 115, 
+                left: 16, 
+                right: 16, 
+                zIndex: 9999, 
+                elevation: 100,
+                backgroundColor: '#1e293b', // Přidané pozadí pro jistotu
+                borderRadius: 24,
+              }}
+            >
+              <RestTimer duration={timerDuration} onClose={() => setShowTimer(false)} />
             </View>
+          )}
 
-            <Button onPress={() => void handleLog()}>
-              Uložit workout
-            </Button>
+          <View className="absolute bottom-0 left-0 right-0 p-6 bg-slate-900 border-t border-slate-800 shadow-2xl">
+            <TouchableOpacity onPress={saveWorkoutSession} className="bg-green-600 p-4 rounded-2xl items-center">
+              <Text className="text-white font-bold text-xl uppercase tracking-widest">Uložit trénink</Text>
+            </TouchableOpacity>
           </View>
-        ) : (
-          <Text className="text-sm leading-6 text-text">
-            Nemáš naplánovaný workout na dnešní den. V záložce `Plány` si naplánuj cyklus.
-          </Text>
-        )}
-      </SectionCard>
-
-      <SectionCard title="Nejbližší tréninky" subtitle="Podle tvých plánů">
-        {upcoming.length === 0 ? (
-          <Text className="text-sm leading-6 text-text">Zatím nemáš žádné tréninky naplánované.</Text>
-        ) : (
-          <View className="gap-3">
-            {upcoming.map((item, idx) => (
-              <View
-                // eslint-disable-next-line react/no-array-index-key
-                key={`${item.date.toISOString()}-${idx}`}
-                className="rounded-2xl border border-border bg-card px-4 py-3"
-              >
-                <Text className="text-sm font-semibold text-text">{formatDate(item.date)}</Text>
-                <Text className="text-sm leading-6 text-muted">
-                  {item.plan_title} · {item.exercise_name ?? "Cvik"}
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
-      </SectionCard>
-
-      <SectionCard title="Poslední zapsané" subtitle="Rychlý přehled">
-        {isLoadingRecent ? (
-          <View className="items-center py-6">
-            <ActivityIndicator size="small" color="#f97316" />
-          </View>
-        ) : recentLogs.length === 0 ? (
-          <Text className="text-sm leading-6 text-text">Zatím nemáš žádné záznamy.</Text>
-        ) : (
-          <View className="gap-3">
-            {recentLogs.map((log) => (
-              <View key={log.id} className="rounded-2xl border border-border bg-card px-4 py-3">
-                <Text className="text-sm font-semibold text-text">
-                  {log.exercise_name ?? "Cvik"} · {formatDate(log.date)}
-                </Text>
-                <Text className="text-sm leading-6 text-muted">
-                  {log.weight_lifted} kg · {log.reps_done} opakování
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
-      </SectionCard>
+        </View>
+      </Modal>
     </ScreenContainer>
   );
 }
