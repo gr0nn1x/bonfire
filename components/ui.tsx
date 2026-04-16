@@ -70,28 +70,32 @@ export function ToggleField({
   );
 }
 
+// PŘIDÁNO: className?: string do rozhraní Props
 interface ButtonProps extends PropsWithChildren {
   onPress: () => void;
   variant?: "primary" | "secondary";
   disabled?: boolean;
+  className?: string; 
 }
 
 export function Button({
   onPress,
   variant = "primary",
   disabled = false,
+  className = "", // PŘIDÁNO: defaultní prázdná hodnota
   children,
 }: ButtonProps) {
-  const className =
+  const variantClassName =
     variant === "primary"
       ? "bg-primary"
       : "border border-border bg-surface";
 
   return (
     <Pressable
-      className={`rounded-2xl px-4 py-4 ${className} ${
+      // PŘIDÁNO: ${className} na konec, aby se aplikovaly custom třídy
+      className={`rounded-2xl px-4 py-4 ${variantClassName} ${
         disabled ? "opacity-60" : ""
-      }`}
+      } ${className}`}
       onPress={onPress}
       disabled={disabled}
     >

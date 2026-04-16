@@ -1,4 +1,4 @@
-// lib/achievements.ts
+import { supabase } from "@/lib/supabase";
 
 export interface Achievement {
   id: string;
@@ -121,7 +121,6 @@ export const calculateStatsFromLogs = (logs: any[]): CalculatedStats => {
   const morningDates = new Set<string>();
   const nightDates = new Set<string>();
 
-  // 1. Projdeme všechny logy a posbíráme data
   logs.forEach(log => {
     const weight = parseFloat(log.weight_lifted) || 0;
     const reps = parseInt(log.reps_done) || 0;
@@ -132,7 +131,7 @@ export const calculateStatsFromLogs = (logs: any[]): CalculatedStats => {
     
     if (log.date) {
       const d = new Date(log.date);
-      const dateKey = d.toISOString().split('T')[0]; // YYYY-MM-DD
+      const dateKey = d.toISOString().split('T')[0]; 
       uniqueDates.add(dateKey);
 
       const hour = d.getHours();
@@ -146,7 +145,6 @@ export const calculateStatsFromLogs = (logs: any[]): CalculatedStats => {
     if (name.includes("squat") || name.includes("dřep")) maxSquat = Math.max(maxSquat, weight);
   });
 
-  // 2. VÝPOČET DYNAMICKÉHO STREAKU (Mezera max 7 dní)
   const sortedDates = Array.from(uniqueDates).sort() as string[]; 
   let streak = 0;
 
@@ -154,13 +152,10 @@ export const calculateStatsFromLogs = (logs: any[]): CalculatedStats => {
     const today = new Date();
     const lastWorkoutDate = new Date(sortedDates[sortedDates.length - 1]);
     
-    // Rozdíl v dnech od posledního tréninku k dnešku
     const diffToToday = (today.getTime() - lastWorkoutDate.getTime()) / (1000 * 3600 * 24);
 
-    // Pokud uživatel cvičil v posledních 7 dnech, streak žije a počítáme ho
     if (diffToToday <= 7) {
       streak = 1;
-      // Procházíme data od konce a kontrolujeme mezery
       for (let i = sortedDates.length - 1; i > 0; i--) {
         const current = new Date(sortedDates[i]);
         const previous = new Date(sortedDates[i - 1]);
@@ -169,12 +164,10 @@ export const calculateStatsFromLogs = (logs: any[]): CalculatedStats => {
         if (gap <= 7) {
           streak++;
         } else {
-          // Mezera byla delší než týden, tady streak končí
           break;
         }
       }
     } else {
-      // Poslední trénink byl před více než 7 dny
       streak = 0;
     }
   }
@@ -194,3 +187,55 @@ export const calculateStatsFromLogs = (logs: any[]): CalculatedStats => {
     currentStreak: streak
   };
 };
+
+// 3. SYNCHRONIZACE DO DATABÁZE
+export async function syncAchievements(userId: string, stats: CalculatedStats) {
+  const earnedIds: string[] = [];
+
+  // Dynamicky vytvoříme seznam odznaků, na které má uživatel nárok
+  ACHIEVEMENT_DEFINITIONS.forEach(def => {
+    const currentValue = def.getValue(stats);
+    
+    def.targets.forEach((target, index) => {
+      if (currentValue >= target) {
+        // Vytvoříme ID ve formátu: id_level (např. 'bench_1', 'bench_2' atd.)
+        earnedIds.push(`${def.id}_${index + 1}`);
+      }
+    });
+  });
+
+  if (earnedIds.length === 0) return;
+
+  try {
+    // 1. Zjistíme, co už má zapsané v DB
+    const { data: existing, error: fetchErr } = await supabase
+      .from('user_achievements')
+      .select('achievement_id')
+      .eq('user_id', userId);
+
+    if (fetchErr) throw fetchErr;
+
+    const alreadyOwnedIds = existing?.map(e => e.achievement_id) || [];
+    
+    // 2. Najdeme jen ty, které jsou nové
+    const newlyEarnedIds = earnedIds.filter(id => !alreadyOwnedIds.includes(id));
+
+    if (newlyEarnedIds.length > 0) {
+      const toInsert = newlyEarnedIds.map(id => ({
+        user_id: userId,
+        achievement_id: id
+      }));
+
+      // 3. Zapíšeme do DB (to spustí Trigger do Feedu)
+      const { error: insertErr } = await supabase.from('user_achievements').insert(toInsert);
+      
+      if (insertErr) {
+        console.error("Chyba při zápisu achievementů do DB:", insertErr.message);
+      } else {
+        console.log(`Odemčeno ${newlyEarnedIds.length} nových odznaků:`, newlyEarnedIds);
+      }
+    }
+  } catch (e) {
+    console.error("Achievement sync error:", e);
+  }
+}

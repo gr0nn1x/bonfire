@@ -141,3 +141,16 @@ export async function searchPotentialFriends(
   return results.filter((p) => p.id !== mine.id);
 }
 
+// Přidej toto na konec souboru lib/friends.ts
+export async function removeFriend(friendId: string) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Uživatel není přihlášen");
+
+  const { error } = await supabase
+    .from('friendships')
+    .delete()
+    // Smaže záznam, kde jsem já poslal žádost JEMU, nebo ON poslal MĚ
+    .or(`and(user_id.eq.${user.id},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${user.id})`);
+
+  if (error) throw error;
+}

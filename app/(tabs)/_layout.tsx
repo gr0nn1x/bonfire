@@ -1,6 +1,7 @@
 import { Tabs, Redirect } from "expo-router";
 import { useAuth } from "@/hooks/useAuth";
 import { ActivityIndicator, View } from "react-native";
+import { Activity } from 'lucide-react-native';
 
 export default function TabsLayout() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -20,9 +21,17 @@ export default function TabsLayout() {
         tabBarActiveTintColor: "#f97316",
       }}
     >
+     
       <Tabs.Screen name="index" options={{ title: "Domů" }} />
       <Tabs.Screen name="plans" options={{ title: "Plány" }} />
       <Tabs.Screen name="stats" options={{ title: "Statistiky" }} />
+       <Tabs.Screen
+        name="feed"
+        options={{
+          title: 'Feed',
+          tabBarIcon: ({ color }) => <Activity size={24} color={color} />,
+        }}
+      />
       <Tabs.Screen name="profile" options={{ title: "Profil" }} />
     </Tabs>
   );

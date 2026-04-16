@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
-import { View, Text, ScrollView, Dimensions, ActivityIndicator, TouchableOpacity, Alert, Pressable } from "react-native";
-import { useLocalSearchParams, Stack, useRouter } from "expo-router";
+import { View, Text, ScrollView, Dimensions, ActivityIndicator, TouchableOpacity, Alert, Pressable, Image, Platform } from "react-native";import { useLocalSearchParams, Stack, useRouter } from "expo-router";
 import { LineChart } from "react-native-chart-kit";
 import { supabase } from "@/lib/supabase";
 
 // Importy pro statistiky a achievementy
 import { calculateStatsFromLogs, CalculatedStats } from "@/lib/achievements";
 import { AchievementSection } from "@/components/AchievementSection";
+import { removeFriend } from "@/lib/friends";
+// Ujisti se, že importuješ Alert
 
 const screenWidth = Dimensions.get("window").width;
 const DAYS_NAMES_SHORT = ["?", "Po", "Út", "St", "Čt", "Pá", "So", "Ne"];
@@ -140,21 +141,101 @@ export default function FriendProfileScreen() {
       setIsCopying(false);
     }
   };
+ const handleRemoveFriend = async () => {
+    const username = data?.profile?.username;
+
+    // Bezpečná funkce pro návrat (vyřeší ten error GO_BACK)
+    const goBackSafely = () => {
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/feed'); // Pokud není historie, hodíme ho tvrdě na Feed
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm(`Opravdu chceš odebrat uživatele @${username}?`);
+      if (confirmed) {
+        try {
+          await removeFriend(id as string);
+          goBackSafely(); // <--- Použijeme novou bezpečnou funkci
+        } catch (e) {
+          alert("Nepodařilo se odebrat přítele.");
+        }
+      }
+    } else {
+      Alert.alert(
+        "Odebrat z přátel",
+        `Opravdu chceš odebrat uživatele @${username}?`,
+        [
+          { text: "Zrušit", style: "cancel" },
+          { 
+            text: "Odebrat", 
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await removeFriend(id as string);
+                goBackSafely(); // <--- Použijeme novou bezpečnou funkci
+              } catch (e) {
+                Alert.alert("Chyba", "Nepodařilo se odebrat přítele.");
+              }
+            }
+          }
+        ]
+      );
+    }
+  };
 
   if (loading || !data) return <ActivityIndicator className="flex-1 bg-slate-900" color="#f97316" />;
 
   return (
     <ScrollView className="flex-1 bg-slate-900 p-4">
-      <Stack.Screen options={{ title: data.profile?.username || "Profil" }} />
+      <Stack.Screen options={{ title: data.profile?.username || "Profil", headerBackTitle: "Zpět" }} />
       
-      <Text className="text-3xl font-bold text-white mb-1">{data.profile?.username}</Text>
-      <View className="bg-orange-500/10 px-3 py-2 rounded-2xl flex-row items-center border border-orange-500/20">
-    <Text className="text-xl mr-1">🔥</Text>
-    <Text className="text-orange-500 font-black text-lg">{stats.currentStreak}</Text>
-  </View>
-      <Text className="text-orange-500 font-bold mb-6 text-lg">
-        Level {data.profile?.level} • {data.profile?.strength_points} SP
-      </Text>
+      {/* --- HLAVIČKA PROFILU (PŘIDÁNO BIO A AVATAR) --- */}
+      <View className="bg-slate-800 p-5 rounded-[32px] border border-slate-700 mb-6 mt-2">
+        <View className="flex-row items-center mb-4">
+          <View className="w-16 h-16 rounded-full bg-slate-700 items-center justify-center mr-4 overflow-hidden border border-slate-600">
+            {data.profile?.avatar_url ? (
+              <Image source={{ uri: data.profile.avatar_url }} className="w-full h-full" />
+            ) : (
+              <Text className="text-slate-300 font-bold text-xl">
+                {data.profile?.username?.charAt(0).toUpperCase()}
+              </Text>
+            )}
+          </View>
+          <View className="flex-1">
+            <Text className="text-3xl font-bold text-white mb-1">@{data.profile?.username}</Text>
+            <View className="flex-row items-center">
+               <Text className="text-orange-500 font-bold mr-3 text-sm">
+                Level {data.profile?.level} • {data.profile?.strength_points} SP
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Streak ukázaný v hlavičce profilu */}
+        <View className="flex-row items-center justify-between">
+           {data.profile?.bio ? (
+              <View className="flex-1 mr-4">
+                 <Text className="text-slate-300 italic text-sm">"{data.profile.bio}"</Text>
+                 {/* Tlačítko pro odebrání z přátel */}
+        <TouchableOpacity 
+          onPress={handleRemoveFriend}
+          className="mt-4 bg-red-900/40 p-3 rounded-xl border border-red-500/50 items-center"
+        >
+          <Text className="text-red-400 font-bold">🗑️ Odebrat z přátel</Text>
+        </TouchableOpacity>
+              </View>
+           ) : (
+              <View className="flex-1" />
+           )}
+           <View className="bg-orange-500/10 px-3 py-2 rounded-2xl flex-row items-center border border-orange-500/20 self-start">
+             <Text className="text-xl mr-1">🔥</Text>
+             <Text className="text-orange-500 font-black text-lg">{stats.currentStreak}</Text>
+           </View>
+        </View>
+      </View>
 
       {/* --- ACHIEVEMENTY --- */}
       <AchievementSection stats={stats} />
