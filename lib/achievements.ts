@@ -108,6 +108,29 @@ export const ACHIEVEMENT_DEFINITIONS: Achievement[] = [
   }
 ];
 
+// --- POMOCNÉ FUNKCE PRO SJEDNOCENÍ NÁZVŮ CVIKŮ ---
+
+// Odstraní háčky, čárky a převede na malá písmena
+const normalizeExerciseName = (name: string): string => {
+  if (!name) return "";
+  return name
+    .normalize("NFD") 
+    .replace(/[\u0300-\u036f]/g, "") 
+    .toLowerCase()
+    .trim();
+};
+
+// Sloučí různé varianty názvů (česky/anglicky) do jednoho klíče
+const getCanonicalExerciseName = (name: string): string => {
+  const norm = normalizeExerciseName(name);
+  
+  if (norm.includes("bench") || norm.includes("tlak na lavici")) return "benchpress";
+  if (norm.includes("squat") || norm.includes("drep")) return "squat";
+  if (norm.includes("deadlift") || norm.includes("tah") || norm.includes("pozdved")) return "deadlift";
+  
+  return norm; 
+};
+
 // 2. SPOLEČNÁ LOGIKA VÝPOČTU
 export const calculateStatsFromLogs = (logs: any[]): CalculatedStats => {
   let totalWeight = 0;
@@ -116,7 +139,8 @@ export const calculateStatsFromLogs = (logs: any[]): CalculatedStats => {
   let maxDeadlift = 0;
   let maxSquat = 0;
 
-  const uniqueExercises = new Set();
+  // Používáme Set stringů pro sjednocené názvy cviků místo IDček
+  const uniqueExercises = new Set<string>();
   const uniqueDates = new Set<string>();
   const morningDates = new Set<string>();
   const nightDates = new Set<string>();
@@ -127,8 +151,15 @@ export const calculateStatsFromLogs = (logs: any[]): CalculatedStats => {
     totalWeight += (weight * reps);
     totalReps += reps;
 
-    if (log.exercise_id) uniqueExercises.add(log.exercise_id);
+    // Sjednocení názvu cviku
+    const rawName = log.exercises?.name || "";
+    const canonicalName = getCanonicalExerciseName(rawName);
+
+    if (canonicalName) {
+      uniqueExercises.add(canonicalName);
+    }
     
+    // Zpracování datumu a času
     if (log.date) {
       const d = new Date(log.date);
       const dateKey = d.toISOString().split('T')[0]; 
@@ -139,10 +170,10 @@ export const calculateStatsFromLogs = (logs: any[]): CalculatedStats => {
       if (hour >= 21) nightDates.add(dateKey);
     }
 
-    const name = log.exercises?.name?.toLowerCase() || "";
-    if (name.includes("bench")) maxBench = Math.max(maxBench, weight);
-    if (name.includes("deadlift") || name.includes("tah")) maxDeadlift = Math.max(maxDeadlift, weight);
-    if (name.includes("squat") || name.includes("dřep")) maxSquat = Math.max(maxSquat, weight);
+    // Porovnávání maximálek na sjednocených názvech
+    if (canonicalName === "benchpress") maxBench = Math.max(maxBench, weight);
+    if (canonicalName === "deadlift") maxDeadlift = Math.max(maxDeadlift, weight);
+    if (canonicalName === "squat") maxSquat = Math.max(maxSquat, weight);
   });
 
   const sortedDates = Array.from(uniqueDates).sort() as string[]; 
