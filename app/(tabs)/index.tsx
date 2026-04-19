@@ -33,10 +33,9 @@ export default function HomeScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // OPRAVA: Odstraněna nadbytečná závorka na konci selectu (byly tam 4, mají být 3)
       const { data: plan, error: planError } = await supabase
         .from('workout_plans')
-        .select('*, plan_days(*, plan_exercises(*, weight, notes, exercises(name)))')
+        .select('*, plan_days(*, plan_exercises(*, exercises(name)))')
         .eq('user_id', user.id)
         .eq('is_active', true)
         .maybeSingle();
@@ -49,12 +48,12 @@ export default function HomeScreen() {
           .from('workout_logs')
           .select('date, weight_lifted, reps_done')
           .eq('user_id', user.id)
-          .eq('plan_id', (plan as any).id); // Přidáno (plan as any)
+          .eq('plan_id', plan.id);
 
         if (logs) {
-          const dates = logs
-            .filter(l => (Number(l.weight_lifted) > 0 || Number(l.reps_done) > 0))
-            .map(l => l.date.split('T')[0]);
+          // OPRAVA 1: Zrušeno filtrování podle váhy/opakování. 
+          // Nyní stačí, že je záznam v databázi, a den zezelená.
+          const dates = logs.map(l => l.date.split('T')[0]);
           setCompletedDates([...new Set(dates)]);
         }
         updateTodayWorkout(plan, selectedDate);
@@ -67,7 +66,7 @@ export default function HomeScreen() {
   const updateTodayWorkout = (plan: any, date: Date) => {
     let dayNum = date.getDay();
     dayNum = dayNum === 0 ? 7 : dayNum;
-    const dayMatch = plan.plan_days.find((d: any) => d.day_of_week === dayNum);
+    const dayMatch = plan.plan_days?.find((d: any) => d.day_of_week === dayNum);
     setTodayWorkout(dayMatch || null);
   };
 
@@ -81,32 +80,31 @@ export default function HomeScreen() {
   const startWorkout = async () => {
     if (!activePlan) return;
     const { data: { user } } = await supabase.auth.getUser();
+    
+    // Získáme spolehlivé lokální datum bez ohledu na časové pásmo
     const dateStr = getLocalDateString(selectedDate);
 
     const { data: existingLogs } = await supabase
       .from('workout_logs')
       .select('*')
       .eq('user_id', user?.id)
-      .eq('plan_id', (activePlan as any).id)
+      .eq('plan_id', activePlan.id)
       .gte('date', `${dateStr}T00:00:00`)
       .lte('date', `${dateStr}T23:59:59`);
 
     let items = [];
-    if (todayWorkout) {
+    if (todayWorkout?.plan_exercises) {
       items = todayWorkout.plan_exercises.map((pe: any) => {
         const log = existingLogs?.find(l => l.exercise_id === pe.exercise_id);
         return {
           ...pe,
           done: !!log,
-          actual_weight: log ? log.weight_lifted.toString() : (pe.weight?.toString() || ""),
-          actual_reps: log ? log.reps_done.toString() : (pe.reps?.toString() || ""),
-          actual_rpe: log ? (log.rpe?.toString() || "") : (pe.rpe?.toString() || ""),
-          actual_percentage: log ? (log.percentage?.toString() || "") : (pe.percentage?.toString() || ""),
+          actual_weight: log ? String(log.weight_lifted || "") : String(pe.weight || ""),
+          actual_reps: log ? String(log.reps_done || "") : String(pe.reps || ""),
+          actual_rpe: log ? String(log.rpe || "") : String(pe.rpe || ""),
+          actual_percentage: log ? String(log.percentage || "") : String(pe.percentage || ""),
           actual_notes: log ? (log.notes || "") : "",
-          template_notes: pe.notes || "",
-          template_weight: pe.weight || 0,
-          template_sets: pe.sets || 0,
-          template_reps: pe.reps || 0
+          template_notes: pe.notes || ""
         };
       });
     }
@@ -119,7 +117,11 @@ export default function HomeScreen() {
     if (!user || !activePlan) return;
     try {
       const dateStr = getLocalDateString(selectedDate);
-      const planId = (activePlan as any).id;
+      const planId = activePlan.id;
+
+      // OPRAVA 2: Ukládáme čas přesně na 12:00:00 (poledne).
+      // Tím pádem to při žádném posunu času (ani zimní/letní, ani středoevropský) neuskočí na předchozí nebo další den.
+      const safeDateString = `${dateStr}T12:00:00`;
 
       await supabase.from('workout_logs').delete()
         .eq('user_id', user.id)
@@ -127,28 +129,46 @@ export default function HomeScreen() {
         .gte('date', `${dateStr}T00:00:00`)
         .lte('date', `${dateStr}T23:59:59`);
 
-      // UKLÁDÁME JEN TY, CO JSOU MANUÁLNĚ ZAŠKRTNUTÉ (ex.done)
       const logsToInsert = sessionExercises
         .filter(ex => ex.done === true) 
-        .map(ex => ({
-          user_id: user.id,
-          plan_id: planId,
-          exercise_id: ex.exercise_id,
-          weight_lifted: parseFloat(ex.actual_weight.replace(',', '.')) || 0,
-          reps_done: parseInt(ex.actual_reps) || 0,
-          rpe: ex.actual_rpe ? parseFloat(ex.actual_rpe.replace(',', '.')) : null,
-          percentage: ex.actual_percentage ? parseFloat(ex.actual_percentage.replace(',', '.')) : null,
-          notes: ex.actual_notes || null,
-          date: selectedDate.toISOString()
-        }));
+        .map(ex => {
+          const safeParseFloat = (val: any) => {
+            if (!val) return null;
+            const parsed = parseFloat(String(val).replace(',', '.'));
+            return isNaN(parsed) ? null : parsed;
+          };
+
+          const safeParseInt = (val: any) => {
+            if (!val) return 0;
+            const parsed = parseInt(String(val).replace(',', '.'), 10);
+            return isNaN(parsed) ? 0 : parsed;
+          };
+
+          return {
+            user_id: user.id,
+            plan_id: planId,
+            exercise_id: ex.exercise_id,
+            weight_lifted: safeParseFloat(ex.actual_weight) || 0,
+            reps_done: safeParseInt(ex.actual_reps) || 0,
+            rpe: safeParseFloat(ex.actual_rpe),
+            percentage: safeParseFloat(ex.actual_percentage),
+            notes: ex.actual_notes || null,
+            date: safeDateString // Zde používáme bezpečný čas v poledne
+          };
+        });
 
       if (logsToInsert.length > 0) {
         const { error } = await supabase.from('workout_logs').insert(logsToInsert);
         if (error) throw error;
       }
+      
       setIsExecuting(false);
-      fetchData();
-    } catch (e: any) { Alert.alert("Chyba", e.message); }
+      fetchData(); 
+      
+    } catch (e: any) { 
+      Alert.alert("Chyba při ukládání", e.message); 
+      console.error(e);
+    }
   };
 
   const calendarDays = useMemo(() => {
@@ -164,7 +184,6 @@ export default function HomeScreen() {
     <ScreenContainer>
       <View className="mb-6"><Text className="text-3xl font-bold text-white">Bonfire 🔥</Text></View>
 
-      {/* KALENDÁŘ */}
       <View className="flex-row justify-between mb-8 bg-slate-800 p-2 rounded-2xl">
         {calendarDays.map((date, i) => {
           const isSelected = date.toDateString() === selectedDate.toDateString();
@@ -190,7 +209,7 @@ export default function HomeScreen() {
                 {completedDates.includes(getLocalDateString(selectedDate)) ? "✓ DOKONČENO" : "NAPLÁNOVÁNO"}
               </Text>
               <Text className="text-2xl font-bold text-white mb-1">{todayWorkout.name}</Text>
-              {(activePlan as any).description ? <Text className="text-slate-400 text-xs mb-4 italic">{(activePlan as any).description}</Text> : null}
+              {activePlan.description ? <Text className="text-slate-400 text-xs mb-4 italic">{activePlan.description}</Text> : null}
               <TouchableOpacity onPress={startWorkout} className={`p-4 rounded-2xl mt-6 items-center ${completedDates.includes(getLocalDateString(selectedDate)) ? 'bg-slate-700 border border-green-500' : 'bg-orange-500'}`}>
                 <Text className="text-white font-bold text-lg">{completedDates.includes(getLocalDateString(selectedDate)) ? "ZOBRAZIT / UPRAVIT" : "ZAČÍT CVIČIT"}</Text>
               </TouchableOpacity>
@@ -216,10 +235,10 @@ export default function HomeScreen() {
           </View>
 
           <ScrollView className="p-4" contentContainerStyle={{ paddingBottom: 150 }}>
-            {(activePlan as any)?.description && (
+            {activePlan?.description && (
               <View className="bg-slate-800/50 p-4 rounded-2xl mb-6 border border-slate-700">
                 <Text className="text-orange-500 font-bold text-[10px] uppercase mb-1">Cíl šablony</Text>
-                <Text className="text-slate-300 text-xs italic">{(activePlan as any).description}</Text>
+                <Text className="text-slate-300 text-xs italic">{activePlan.description}</Text>
               </View>
             )}
 
@@ -227,7 +246,7 @@ export default function HomeScreen() {
               <View key={idx} className={`mb-6 p-5 rounded-[32px] border ${ex.done ? 'bg-green-900/10 border-green-500/50' : 'bg-slate-800 border-slate-700'}`}>
                 <View className="flex-row justify-between items-center mb-4">
                   <View className="flex-1">
-                    <Text className="text-xl font-bold text-white">{ex.exercises.name}</Text>
+                    <Text className="text-xl font-bold text-white">{ex.exercises?.name || "Neznámý cvik"}</Text>
                     {ex.template_notes ? <Text className="text-orange-300/80 text-[11px] italic mt-1">💡 {ex.template_notes}</Text> : null}
                   </View>
                   
