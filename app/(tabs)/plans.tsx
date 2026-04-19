@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal, Pressable, Platform } from "react-native";
 import { supabase } from "@/lib/supabase";
+import { useRouter } from 'expo-router';
+import { Search, Globe, Lock } from 'lucide-react-native';
 
 type BuilderExercise = {
   tempId: string;
@@ -8,7 +10,7 @@ type BuilderExercise = {
   exercise_name: string;
   sets: string;
   reps: string;
-  weight: string; // PŘIDÁNO
+  weight: string;
   rpe: string;
   percentage: string;
   notes: string;
@@ -24,14 +26,15 @@ type BuilderDay = {
 const DAYS_OF_WEEK = ["Po", "Út", "St", "Čt", "Pá", "So", "Ne"];
 
 export default function PlansScreen() {
-  const [viewMode, setViewMode] = useState<'list' | 'builder'>('list');
+  const router = useRouter(); 
   
+  const [viewMode, setViewMode] = useState<'list' | 'builder'>('list');
   const [plans, setPlans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // BUILDER STAVY
   const [planName, setPlanName] = useState("");
-  const [planDescription, setPlanDescription] = useState(""); // PŘIDÁNO
+  const [planDescription, setPlanDescription] = useState("");
   const [builderDays, setBuilderDays] = useState<BuilderDay[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
@@ -60,6 +63,71 @@ export default function PlansScreen() {
     await supabase.from('workout_plans').update({ is_active: false }).eq('user_id', user.id);
     await supabase.from('workout_plans').update({ is_active: true }).eq('id', planId);
     fetchPlans();
+  };
+
+  // --- NOVÁ FUNKCE PRO SDÍLENÍ NA TRŽIŠTĚ ---
+// --- NOVÁ FUNKCE PRO SDÍLENÍ NA TRŽIŠTĚ (OPRAVENÁ PRO WEB) ---
+  const togglePublicStatus = async (plan: any) => {
+    try {
+      // Pokud už je veřejný, jen ho skryjeme
+      if (plan.is_public) {
+        await supabase.from('workout_plans').update({ is_public: false }).eq('id', plan.id);
+        fetchPlans();
+        if (Platform.OS === 'web') {
+          window.alert("Skryto 🔒\nPlán už není v Tržišti viditelný.");
+        } else {
+          Alert.alert("Skryto 🔒", "Plán už není v Tržišti viditelný.");
+        }
+        return;
+      }
+
+      // CHCEME ZVEŘEJNIT -> KONTROLA LIMITACÍ
+      if (!plan.description || plan.description.length < 10) {
+        if (Platform.OS === 'web') {
+          window.alert("Chybí popis\nAbys mohl plán sdílet, přidej mu přes tlačítko 'Upravit' smysluplný popis (alespoň 10 znaků).");
+        } else {
+          Alert.alert("Chybí popis", "Abys mohl plán sdílet, přidej mu přes tlačítko 'Upravit' smysluplný popis (alespoň 10 znaků).");
+        }
+        return;
+      }
+
+      // Spočítáme cviky v databázi pro tento plán
+      const { data: days, error } = await supabase
+        .from('plan_days')
+        .select('id, plan_exercises(id)')
+        .eq('plan_id', plan.id);
+
+      if (error) throw error;
+
+      let totalExercises = 0;
+      days?.forEach(d => {
+        totalExercises += d.plan_exercises?.length || 0;
+      });
+
+      if (totalExercises < 5) {
+        if (Platform.OS === 'web') {
+          window.alert(`Málo cviků\nTvůj plán má aktuálně jen ${totalExercises} cviků. Pro sdílení komunitě jich musí mít alespoň 5.`);
+        } else {
+          Alert.alert(
+            "Málo cviků", 
+            `Tvůj plán má aktuálně jen ${totalExercises} cviků. Pro sdílení komunitě jich musí mít alespoň 5.`
+          );
+        }
+        return;
+      }
+
+      // Pokud projde kontrolou, zveřejníme ho
+      await supabase.from('workout_plans').update({ is_public: true }).eq('id', plan.id);
+      fetchPlans();
+      if (Platform.OS === 'web') {
+        window.alert("Sdíleno! 🚀\nTvůj plán je nyní veřejně na Tržišti a může ho kdokoli vidět a použít.");
+      } else {
+        Alert.alert("Sdíleno! 🚀", "Tvůj plán je nyní veřejně na Tržišti a může ho kdokoli vidět a použít.");
+      }
+    } catch (e: any) {
+      if (Platform.OS === 'web') window.alert("Chyba: " + e.message);
+      else Alert.alert("Chyba", e.message);
+    }
   };
 
   const handleDeletePlan = async (planId: string) => {
@@ -93,7 +161,7 @@ export default function PlansScreen() {
       if (error) throw error;
 
       setPlanName(data.name);
-      setPlanDescription(data.description || ""); // NAČTENÍ POPISU
+      setPlanDescription(data.description || "");
       setEditingPlanId(data.id);
 
       const loadedDays: BuilderDay[] = data.plan_days.map((d: any) => ({
@@ -106,7 +174,7 @@ export default function PlansScreen() {
           exercise_name: ex.exercises.name,
           sets: ex.sets?.toString() || "",
           reps: ex.reps?.toString() || "",
-          weight: ex.weight?.toString() || "", // NAČTENÍ VÁHY
+          weight: ex.weight?.toString() || "",
           rpe: ex.rpe?.toString() || "",
           percentage: ex.percentage?.toString() || "",
           notes: ex.notes || ""
@@ -132,7 +200,7 @@ export default function PlansScreen() {
       exercise_name: "Vybrat cvik...", 
       sets: "", 
       reps: "", 
-      weight: "", // PŘIDÁNO
+      weight: "",
       rpe: "", 
       percentage: "", 
       notes: "" 
@@ -156,15 +224,13 @@ export default function PlansScreen() {
       let finalPlanId = editingPlanId;
 
       if (editingPlanId) {
-        // UPDATE PLÁNU VČETNĚ DESCRIPTION
         await supabase.from('workout_plans').update({ name: planName, description: planDescription }).eq('id', editingPlanId);
         await supabase.from('plan_days').delete().eq('plan_id', editingPlanId);
       } else {
-        // NOVÝ PLÁN
         const { data: planData, error: planErr } = await supabase.from('workout_plans').insert({ 
           user_id: user.id, 
           name: planName, 
-          description: planDescription, // PŘIDÁNO
+          description: planDescription,
           is_active: plans.length === 0 
         }).select().single();
         if (planErr) throw planErr;
@@ -187,7 +253,7 @@ export default function PlansScreen() {
             exercise_id: ex.exercise_id,
             sets: parseInt(ex.sets) || 0,
             reps: parseInt(ex.reps) || 0,
-            weight: parseFloat(ex.weight) || 0, // UKLÁDÁNÍ VÁHY
+            weight: parseFloat(ex.weight) || 0,
             rpe: parseFloat(ex.rpe) || null,
             percentage: parseFloat(ex.percentage) || null,
             notes: ex.notes,
@@ -332,18 +398,17 @@ export default function PlansScreen() {
                       <Text className="text-slate-500 text-[8px] uppercase font-bold mb-1 ml-1 text-center">Opak.</Text>
                       <TextInput placeholder="O" placeholderTextColor="#475569" keyboardType="numeric" value={ex.reps} onChangeText={(v) => updateExercise(dIdx, eIdx, 'reps', v)} className="bg-slate-800 text-white p-2 rounded-lg text-center border border-slate-700" />
                     </View>
-                    {/* NOVÁ KOLONKA VÁHA */}
                     <View className="flex-1">
-  <Text className="text-orange-400 text-[8px] uppercase font-bold mb-1 ml-1 text-center">Váha</Text>
-  <TextInput 
-    placeholder="Kg" 
-    placeholderTextColor="#475569" 
-    keyboardType="numeric" 
-    value={ex.weight} 
-    onChangeText={(v) => updateExercise(dIdx, eIdx, 'weight', v)} 
-    className="bg-slate-800 text-white p-2 rounded-lg text-center border border-orange-500/20" 
-  />
-</View>
+                      <Text className="text-orange-400 text-[8px] uppercase font-bold mb-1 ml-1 text-center">Váha</Text>
+                      <TextInput 
+                        placeholder="Kg" 
+                        placeholderTextColor="#475569" 
+                        keyboardType="numeric" 
+                        value={ex.weight} 
+                        onChangeText={(v) => updateExercise(dIdx, eIdx, 'weight', v)} 
+                        className="bg-slate-800 text-white p-2 rounded-lg text-center border border-orange-500/20" 
+                      />
+                    </View>
                     <View className="flex-1">
                       <Text className="text-slate-500 text-[8px] uppercase font-bold mb-1 ml-1 text-center">RPE</Text>
                       <TextInput placeholder="R" placeholderTextColor="#475569" keyboardType="numeric" value={ex.rpe} onChangeText={(v) => updateExercise(dIdx, eIdx, 'rpe', v)} className="bg-slate-800 text-white p-2 rounded-lg text-center border border-slate-700" />
@@ -406,14 +471,48 @@ export default function PlansScreen() {
 
   return (
     <ScrollView className="flex-1 bg-slate-900 p-4">
-      <Text className="text-3xl font-bold text-white mb-6 mt-2">Moje Plány</Text>
+      <Text className="text-3xl font-bold text-white mb-4 mt-2">Moje Plány</Text>
+
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={() => router.push('/discover')}
+        className="bg-slate-800 p-4 rounded-2xl border border-slate-700 flex-row items-center justify-between shadow-sm mb-4"
+      >
+        <View className="flex-row items-center">
+          <View className="bg-orange-500/20 p-3 rounded-xl mr-4 border border-orange-500/30">
+            <Search size={22} color="#f97316" />
+          </View>
+          <View>
+            <Text className="text-white font-bold text-lg">Tržiště plánů</Text>
+            <Text className="text-slate-400 text-xs">Objev inspiraci od ostatních</Text>
+          </View>
+        </View>
+        <Text className="text-orange-500 font-bold text-xl">→</Text>
+      </TouchableOpacity>
+
       <TouchableOpacity onPress={() => { setViewMode('builder'); setEditingPlanId(null); setPlanName(""); setPlanDescription(""); setBuilderDays([]); }} className="bg-orange-500 p-4 rounded-xl mb-8 items-center flex-row justify-center gap-2 shadow-lg">
         <Text className="text-white font-bold text-lg">Vytvořit nový plán</Text>
       </TouchableOpacity>
+      
       {plans.map((plan) => (
         <View key={plan.id} className={`p-4 rounded-xl mb-4 border ${plan.is_active ? 'bg-orange-500/10 border-orange-500' : 'bg-slate-800 border-slate-700'}`}>
-          <Text className="text-xl font-bold text-white mb-1">{plan.name}</Text>
-          {plan.description ? <Text className="text-slate-400 text-xs mb-4" numberOfLines={2}>{plan.description}</Text> : null}
+          
+          <View className="flex-row justify-between items-start mb-1">
+            <Text className="text-xl font-bold text-white flex-1">{plan.name}</Text>
+            {/* Tlačítko pro sdílení / zrušení sdílení */}
+            <TouchableOpacity 
+              onPress={() => togglePublicStatus(plan)}
+              className={`px-3 py-1.5 rounded-lg flex-row items-center ml-2 border ${plan.is_public ? 'bg-blue-900/30 border-blue-500/30' : 'bg-slate-700 border-slate-600'}`}
+            >
+              {plan.is_public ? <Globe size={14} color="#60a5fa" /> : <Lock size={14} color="#94a3b8" />}
+              <Text className={`font-bold text-xs ml-1.5 ${plan.is_public ? 'text-blue-400' : 'text-slate-400'}`}>
+                {plan.is_public ? 'Veřejný' : 'Sdílet'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {plan.description ? <Text className="text-slate-400 text-xs mb-4" numberOfLines={2}>{plan.description}</Text> : <View className="mb-4" />}
+          
           <View className="flex-row justify-between items-center">
             <View className="flex-row gap-2">
               {!plan.is_active && <TouchableOpacity className="bg-slate-700 px-4 py-2 rounded-lg" onPress={() => handleSetActive(plan.id)}><Text className="text-white font-semibold">Zvolit</Text></TouchableOpacity>}
@@ -421,6 +520,7 @@ export default function PlansScreen() {
             </View>
             <TouchableOpacity onPress={() => handleDeletePlan(plan.id)}><Text className="text-red-500 font-bold">Smazat</Text></TouchableOpacity>
           </View>
+
         </View>
       ))}
     </ScrollView>
