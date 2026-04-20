@@ -4,6 +4,9 @@ import { supabase } from "@/lib/supabase";
 import { ScreenContainer } from "@/components/screen-container";
 import { RestTimer } from "@/components/RestTimer";
 import { PlateCalculator } from "@/components/PlateCalculator";
+import { RpeCalculator } from "@/components/RpeCalculator"; // NOVÉ
+import { DotsCalculator } from "@/components/DotsCalculator";
+import { Trophy, Calculator } from 'lucide-react-native';
 
 const DAYS_NAMES = ["Ne", "Po", "Út", "St", "Čt", "Pá", "So"];
 
@@ -20,12 +23,15 @@ export default function HomeScreen() {
   const [todayWorkout, setTodayWorkout] = useState<any>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [completedDates, setCompletedDates] = useState<string[]>([]);
+  const [showDotsCalc, setShowDotsCalc] = useState(false);
   
   const [isExecuting, setIsExecuting] = useState(false);
   const [sessionExercises, setSessionExercises] = useState<any[]>([]);
   const [showTimer, setShowTimer] = useState(false);
   const [showPlateCalc, setShowPlateCalc] = useState(false);
   const [currentWeightForCalc, setCurrentWeightForCalc] = useState(0);
+
+  const [showRpeCalc, setShowRpeCalc] = useState(false); // NOVÉ
 
   const fetchData = async () => {
     setLoading(true);
@@ -182,7 +188,20 @@ export default function HomeScreen() {
 
   return (
     <ScreenContainer>
-      <View className="mb-6"><Text className="text-3xl font-bold text-white">Bonfire 🔥</Text></View>
+     <View className="mb-6 flex-row justify-between items-center">
+  <Text className="text-3xl font-bold text-white">Bonfire Fitness - Git Gud!</Text>
+  <View className="flex-row gap-2">
+    {/* DOTS Tlačidlo */}
+    <TouchableOpacity onPress={() => setShowDotsCalc(true)} className="bg-slate-800 p-2.5 rounded-full border border-slate-700">
+      <Trophy size={24} color="#3b82f6" /> 
+    </TouchableOpacity>
+    
+    {/* RPE Tlačidlo */}
+    <TouchableOpacity onPress={() => setShowRpeCalc(true)} className="bg-slate-800 p-2.5 rounded-full border border-slate-700">
+      <Calculator size={24} color="#f97316" />
+    </TouchableOpacity>
+  </View>
+</View>
 
       <View className="flex-row justify-between mb-8 bg-slate-800 p-2 rounded-2xl">
         {calendarDays.map((date, i) => {
@@ -329,7 +348,10 @@ export default function HomeScreen() {
 
         <PlateCalculator isVisible={showPlateCalc} targetWeight={currentWeightForCalc} onClose={() => setShowPlateCalc(false)} />
         <RestTimer isVisible={showTimer} duration={90} onClose={() => setShowTimer(false)} />
+
       </Modal>
+           <RpeCalculator isVisible={showRpeCalc} onClose={() => setShowRpeCalc(false)} />
+   <DotsCalculator isVisible={showDotsCalc} onClose={() => setShowDotsCalc(false)} />
     </ScreenContainer>
   );
 }

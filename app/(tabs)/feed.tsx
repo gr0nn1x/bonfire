@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { ScreenContainer } from '@/components/screen-container';
 import { SectionCard } from '@/components/section-card';
 import { formatDistanceToNow } from 'date-fns';
-import { cs } from 'date-fns/locale';
+import cs from 'date-fns/locale/cs';
 import { useRouter } from 'expo-router';
 import { getMyProfile } from '@/lib/profile';
 import { Button, Field } from '@/components/ui';
