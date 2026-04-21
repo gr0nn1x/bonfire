@@ -14,14 +14,15 @@
       "typedRoutes": true
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gr0nn1x.bonfire"
     },
     "android": {
+      "package": "com.gr0nn1x.bonfire",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
+        "foregroundImage": "./assets/logo.png",
         "backgroundColor": "#1e1b2e"
-      },
-      "package": "com.gr0nn1x.bonfirefitness"
+      }
     },
     "extra": {
       "router": {},
