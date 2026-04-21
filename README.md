@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="http://googleusercontent.com/image_generation_content/6" alt="Bonfire Fitness Logo" width="200" style="border-radius: 20px; margin-bottom: 20px;" />
+  
   
   # Bonfire Fitness
 
