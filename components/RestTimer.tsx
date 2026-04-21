@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, Modal } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { useLanguage } from "@/hooks/useLanguage";
 
 interface RestTimerProps {
   isVisible: boolean;
@@ -9,6 +10,8 @@ interface RestTimerProps {
 }
 
 export function RestTimer({ isVisible, duration, onClose }: RestTimerProps) {
+  const { language } = useLanguage();
+  const isCs = language === "cs";
   const [timeLeft, setTimeLeft] = useState(duration);
   const presets = [30, 60, 90, 120, 150, 180];
 
@@ -49,7 +52,7 @@ export function RestTimer({ isVisible, duration, onClose }: RestTimerProps) {
       <View className="flex-1 bg-black/70 items-center justify-center p-6">
         
         <View className="bg-slate-800 border-2 border-orange-500 rounded-[40px] p-6 w-full shadow-2xl items-center">
-          <Text className="text-orange-500 font-bold uppercase tracking-[3px] mb-4 text-xs">Pauza mezi sériemi</Text>
+          <Text className="text-orange-500 font-bold uppercase tracking-[3px] mb-4 text-xs">{isCs ? "Pauza mezi sériemi" : "Rest between sets"}</Text>
           
           {/* HLAVNÍ ČAS A OVLÁDÁNÍ +/- */}
           <View className="flex-row items-center justify-between w-full mb-6">
@@ -61,7 +64,7 @@ export function RestTimer({ isVisible, duration, onClose }: RestTimerProps) {
             </TouchableOpacity>
 
             <Text className={`text-7xl font-black ${timeLeft === 0 ? 'text-green-500' : 'text-white'}`}>
-              {timeLeft === 0 ? "JDI!" : formatTime(timeLeft)}
+              {timeLeft === 0 ? (isCs ? "JDI!" : "GO!") : formatTime(timeLeft)}
             </Text>
 
             <TouchableOpacity 
@@ -73,7 +76,7 @@ export function RestTimer({ isVisible, duration, onClose }: RestTimerProps) {
           </View>
 
           {/* PRESETY (Mřížka nebo řada) */}
-          <Text className="text-slate-500 font-bold uppercase text-[10px] mb-3">Rychlé nastavení (sec)</Text>
+          <Text className="text-slate-500 font-bold uppercase text-[10px] mb-3">{isCs ? "Rychlé nastavení (sec)" : "Quick presets (sec)"}</Text>
           <View className="flex-row flex-wrap justify-center gap-2 mb-8">
             {presets.map((s) => (
               <TouchableOpacity
@@ -94,7 +97,7 @@ export function RestTimer({ isVisible, duration, onClose }: RestTimerProps) {
             onPress={onClose}
             className="bg-orange-500 w-full h-16 rounded-3xl items-center justify-center shadow-lg"
           >
-            <Text className="text-white font-black text-xl uppercase italic">Hotovo / Zavřít</Text>
+            <Text className="text-white font-black text-xl uppercase italic">{isCs ? "Hotovo / Zavřít" : "Done / Close"}</Text>
           </TouchableOpacity>
         </View>
 

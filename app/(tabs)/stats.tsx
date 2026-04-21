@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { View, Text, TextInput, TouchableOpacity, ScrollView, Dimensions, ActivityIndicator, Alert, Keyboard } from "react-native";
 import { LineChart } from "react-native-chart-kit";
 import { supabase } from "@/lib/supabase";
-import { EXERCISE_DATABASE, MUSCLE_LABELS, MuscleGroup } from '@/lib/muscleMap';
+import { EXERCISE_DATABASE, MUSCLE_LABELS, MuscleGroup, getLocalizedExerciseName, getLocalizedMuscleLabels } from '@/lib/muscleMap';
+import { useLanguage } from "@/hooks/useLanguage";
 
 const screenWidth = Dimensions.get("window").width;
 
@@ -46,15 +47,18 @@ const calculateMuscleVolume = (logs: any[]) => {
 };
 
 function MuscleHeatmapView({ logs }: { logs: any[] }) {
+  const { language } = useLanguage();
+  const isCs = language === "cs";
+  const muscleLabels = getLocalizedMuscleLabels(language);
   const muscleVolume = calculateMuscleVolume(logs);
   const [selectedMuscle, setSelectedMuscle] = useState<MuscleGroup | null>(null);
 
   return (
     <View className="bg-slate-800 p-4 rounded-xl mb-8 border border-slate-700 shadow-lg">
-      <Text className="text-xl font-bold text-white mb-4">Svalové vytížení (Posledních 7 dní)</Text>
+      <Text className="text-xl font-bold text-white mb-4">{isCs ? "Svalové vytížení (Posledních 7 dní)" : "Muscle load (Last 7 days)"}</Text>
       
       <View className="flex-row flex-wrap gap-2">
-        {(Object.entries(MUSCLE_LABELS) as [MuscleGroup, string][]).map(([key, label]) => {
+        {(Object.entries(muscleLabels) as [MuscleGroup, string][]).map(([key, label]) => {
           const val = muscleVolume[key] || 0;
           let bgColor = 'bg-slate-900 border-slate-700';
           if (val > 0) bgColor = 'bg-yellow-600/40 border-yellow-500/50'; 
@@ -78,19 +82,19 @@ function MuscleHeatmapView({ logs }: { logs: any[] }) {
       {selectedMuscle && (
         <View className="mt-4 p-4 bg-slate-900 rounded-xl border border-blue-500/40">
           <View className="flex-row justify-between items-center mb-3">
-            <Text className="text-blue-400 font-bold uppercase text-[10px] tracking-widest">Nejlepší cviky: {MUSCLE_LABELS[selectedMuscle]}</Text>
+            <Text className="text-blue-400 font-bold uppercase text-[10px] tracking-widest">{isCs ? "Nejlepší cviky" : "Best exercises"}: {muscleLabels[selectedMuscle]}</Text>
             <TouchableOpacity onPress={() => setSelectedMuscle(null)} className="px-2 py-1 bg-slate-800 rounded">
-              <Text className="text-slate-400 font-bold text-xs">Zavřít</Text>
+              <Text className="text-slate-400 font-bold text-xs">{isCs ? "Zavřít" : "Close"}</Text>
             </TouchableOpacity>
           </View>
           <View>
             {EXERCISE_DATABASE
               .filter(ex => ex.primary.includes(selectedMuscle))
               .map(ex => (
-                <Text key={ex.name} className="text-slate-300 py-1 text-sm">• {ex.name}</Text>
+                <Text key={ex.id} className="text-slate-300 py-1 text-sm">• {getLocalizedExerciseName(ex, language)}</Text>
               ))}
             {EXERCISE_DATABASE.filter(ex => ex.primary.includes(selectedMuscle)).length === 0 && (
-              <Text className="text-slate-500 italic text-sm">Zatím žádné hlavní cviky v databázi.</Text>
+              <Text className="text-slate-500 italic text-sm">{isCs ? "Zatím žádné hlavní cviky v databázi." : "No primary exercises in the database yet."}</Text>
             )}
           </View>
         </View>
@@ -101,6 +105,9 @@ function MuscleHeatmapView({ logs }: { logs: any[] }) {
 
 // --- HLAVNÍ OBRAZOVKA STATISTIK ---
 export default function StatsScreen() {
+  const { language } = useLanguage();
+  const isCs = language === "cs";
+  const muscleLabels = getLocalizedMuscleLabels(language);
   const [weightInput, setWeightInput] = useState("");
   const [weightData, setWeightData] = useState<any>(null);
   const [weightLogs, setWeightLogs] = useState<any[]>([]);
@@ -192,7 +199,7 @@ export default function StatsScreen() {
   const handleQuickAddSubmit = async (exerciseId: string) => {
     const weight = quickForms[exerciseId]?.weight?.replace(',', '.');
     const reps = quickForms[exerciseId]?.reps;
-    if (!weight || !reps) { Alert.alert("Chyba", "Vyplň váhu i opakování."); return; }
+    if (!weight || !reps) { Alert.alert(isCs ? "Chyba" : "Error", isCs ? "Vyplň váhu i opakování." : "Fill in weight and reps."); return; }
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -202,7 +209,7 @@ export default function StatsScreen() {
       if (error) throw error;
       setQuickForms(prev => ({ ...prev, [exerciseId]: { weight: "", reps: "" } }));
       fetchData();
-    } catch (e: any) { Alert.alert("Chyba při ukládání", e.message); }
+    } catch (e: any) { Alert.alert(isCs ? "Chyba při ukládání" : "Save failed", e.message); }
   };
 
   const handleSaveWeight = async () => {
@@ -210,18 +217,18 @@ export default function StatsScreen() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     const parsedWeight = parseFloat(weightInput.replace(',', '.'));
-    if (isNaN(parsedWeight)) { Alert.alert("Chyba", "Zadej platné číslo."); return; }
+    if (isNaN(parsedWeight)) { Alert.alert(isCs ? "Chyba" : "Error", isCs ? "Zadej platné číslo." : "Enter a valid number."); return; }
 
     try {
       const { error } = await supabase.from("body_weight_logs").insert({ user_id: user.id, weight: parsedWeight, date: new Date().toISOString() });
       if (error) throw error;
       setWeightInput(""); fetchData();
-    } catch (e: any) { Alert.alert("Chyba", e.message); }
+    } catch (e: any) { Alert.alert(isCs ? "Chyba" : "Error", e.message); }
   };
 
   const handleSaveMaxLift = async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user || !exerciseName || !liftWeight || !liftReps) { Alert.alert("Chyba", "Vyplň všechna pole."); return; }
+    if (!user || !exerciseName || !liftWeight || !liftReps) { Alert.alert(isCs ? "Chyba" : "Error", isCs ? "Vyplň všechna pole." : "Fill in all fields."); return; }
 
     const parsedWeight = parseFloat(liftWeight.replace(',', '.'));
 
@@ -241,7 +248,7 @@ export default function StatsScreen() {
       setExerciseName(""); setLiftWeight(""); setLiftReps("");
       Keyboard.dismiss();
       fetchData();
-    } catch (e: any) { Alert.alert("Chyba", e.message); }
+    } catch (e: any) { Alert.alert(isCs ? "Chyba" : "Error", e.message); }
   };
 
   const handleDeleteWeight = async (id: string) => { await supabase.from('body_weight_logs').delete().eq('id', id); fetchData(); };
@@ -250,16 +257,16 @@ export default function StatsScreen() {
   if (loading) return <ActivityIndicator className="flex-1 bg-slate-900" color="#f97316" />;
 
   const filteredExercises = EXERCISE_DATABASE.filter(ex => 
-    ex.name.toLowerCase().includes(exerciseName.toLowerCase())
+    getLocalizedExerciseName(ex, language).toLowerCase().includes(exerciseName.toLowerCase())
   );
 
   return (
     <ScrollView className="flex-1 bg-slate-900 p-4" keyboardShouldPersistTaps="handled">
       
-      <Text className="text-xl font-bold text-white mb-4 mt-2">Moje Váha</Text>
+      <Text className="text-xl font-bold text-white mb-4 mt-2">{isCs ? "Moje Váha" : "My Weight"}</Text>
       <View className="flex-row gap-2 mb-4">
-        <TextInput className="flex-1 bg-slate-800 text-white p-3 rounded-lg border border-slate-700" placeholder="Aktuální váha (např. 80,5)" placeholderTextColor="#64748b" keyboardType="numeric" value={weightInput} onChangeText={setWeightInput} />
-        <TouchableOpacity className="bg-orange-500 justify-center px-4 rounded-lg" onPress={handleSaveWeight}><Text className="text-white font-bold">Uložit</Text></TouchableOpacity>
+        <TextInput className="flex-1 bg-slate-800 text-white p-3 rounded-lg border border-slate-700" placeholder={isCs ? "Aktuální váha (např. 80,5)" : "Current weight (e.g. 80.5)"} placeholderTextColor="#64748b" keyboardType="numeric" value={weightInput} onChangeText={setWeightInput} />
+        <TouchableOpacity className="bg-orange-500 justify-center px-4 rounded-lg" onPress={handleSaveWeight}><Text className="text-white font-bold">{isCs ? "Uložit" : "Save"}</Text></TouchableOpacity>
       </View>
 
       {weightData && (
@@ -270,7 +277,7 @@ export default function StatsScreen() {
 
       {weightLogs.length > 0 && (
         <View className="bg-slate-800 p-3 rounded-xl mb-8">
-          <Text className="text-slate-400 font-bold mb-2">Historie zápisů váhy:</Text>
+          <Text className="text-slate-400 font-bold mb-2">{isCs ? "Historie zápisů váhy:" : "Weight log history:"}</Text>
           {weightLogs.slice(0, 5).map(log => (
             <View key={log.id} className="flex-row justify-between items-center bg-slate-700 p-2 rounded mb-2">
               <Text className="text-white">{new Date(log.date).toLocaleDateString('cs-CZ')} - <Text className="font-bold text-orange-400"> {log.weight} kg</Text></Text>
@@ -283,11 +290,11 @@ export default function StatsScreen() {
       <MuscleHeatmapView logs={workoutLogs} />
 
       <View className="bg-slate-800 p-4 rounded-xl mb-8 border border-slate-700 z-50">
-        <Text className="text-lg font-bold text-white mb-2">Nový Cvik / Výkon</Text>
+        <Text className="text-lg font-bold text-white mb-2">{isCs ? "Nový Cvik / Výkon" : "New Exercise / Performance"}</Text>
         
         <View style={{ zIndex: 100 }}>
           <TextInput 
-            placeholder="Název cviku (Zadej nebo vyber ze seznamu)" 
+            placeholder={isCs ? "Název cviku (Zadej nebo vyber ze seznamu)" : "Exercise name (type or choose from the list)"} 
             value={exerciseName} 
             onFocus={() => setShowExerciseList(true)}
             onChangeText={(text) => {
@@ -307,18 +314,18 @@ export default function StatsScreen() {
                       key={idx} 
                       className="p-3 border-b border-slate-800 flex-row justify-between items-center"
                       onPress={() => {
-                        setExerciseName(ex.name);
+                        setExerciseName(getLocalizedExerciseName(ex, language));
                         setShowExerciseList(false);
                       }}
                     >
-                      <Text className="text-white font-bold">{ex.name}</Text>
-                      <Text className="text-slate-500 text-[10px] uppercase">{MUSCLE_LABELS[ex.primary[0]]}</Text>
+                      <Text className="text-white font-bold">{getLocalizedExerciseName(ex, language)}</Text>
+                      <Text className="text-slate-500 text-[10px] uppercase">{muscleLabels[ex.primary[0]]}</Text>
                     </TouchableOpacity>
                   ))
                 ) : (
                   <View className="p-4 items-center">
-                    <Text className="text-slate-400 italic text-sm text-center">Tento cvik ještě neexistuje.</Text>
-                    <Text className="text-orange-500 font-bold mt-1 text-center">Bude vytvořen jako nový! ✨</Text>
+                    <Text className="text-slate-400 italic text-sm text-center">{isCs ? "Tento cvik ještě neexistuje." : "This exercise does not exist yet."}</Text>
+                    <Text className="text-orange-500 font-bold mt-1 text-center">{isCs ? "Bude vytvořen jako nový! ✨" : "It will be created as a new one! ✨"}</Text>
                   </View>
                 )}
               </ScrollView>
@@ -327,15 +334,15 @@ export default function StatsScreen() {
         </View>
 
         <View className="flex-row gap-2 mt-2">
-          <TextInput placeholder="Váha (kg)" value={liftWeight} onChangeText={setLiftWeight} keyboardType="numeric" className="flex-1 bg-slate-900 text-white p-3 rounded-lg border border-slate-700" placeholderTextColor="#64748b" />
-          <TextInput placeholder="Opakování" value={liftReps} onChangeText={setLiftReps} keyboardType="numeric" className="flex-1 bg-slate-900 text-white p-3 rounded-lg border border-slate-700" placeholderTextColor="#64748b" />
+          <TextInput placeholder={isCs ? "Váha (kg)" : "Weight (kg)"} value={liftWeight} onChangeText={setLiftWeight} keyboardType="numeric" className="flex-1 bg-slate-900 text-white p-3 rounded-lg border border-slate-700" placeholderTextColor="#64748b" />
+          <TextInput placeholder={isCs ? "Opakování" : "Reps"} value={liftReps} onChangeText={setLiftReps} keyboardType="numeric" className="flex-1 bg-slate-900 text-white p-3 rounded-lg border border-slate-700" placeholderTextColor="#64748b" />
         </View>
         <TouchableOpacity onPress={handleSaveMaxLift} className="bg-orange-500 p-3 rounded-lg mt-3 items-center">
-          <Text className="text-white font-bold text-lg">Zapsat Výkon</Text>
+          <Text className="text-white font-bold text-lg">{isCs ? "Zapsat Výkon" : "Log Performance"}</Text>
         </TouchableOpacity>
       </View>
 
-      {exerciseGraphs.length > 0 && <Text className="text-xl font-bold text-white mb-4">Moje Cviky (Grafy 1RM)</Text>}
+      {exerciseGraphs.length > 0 && <Text className="text-xl font-bold text-white mb-4">{isCs ? "Moje Cviky (Grafy 1RM)" : "My Exercises (1RM Charts)"}</Text>}
       {exerciseGraphs.map((g, i) => (
         <View key={i} className="mb-8 bg-slate-800/50 p-3 rounded-xl border border-slate-800">
           <Text className="text-slate-200 font-bold mb-2 ml-1 text-lg">{g.name}</Text>
@@ -345,12 +352,12 @@ export default function StatsScreen() {
               <LineChart data={g.chart} width={screenWidth - 56} height={180} chartConfig={{ color: (op = 1) => `rgba(34, 197, 94, ${op})`, backgroundGradientFrom: "#1e293b", backgroundGradientTo: "#1e293b", decimalPlaces: 0 }} bezier style={{ paddingRight: 40 }} />
             </View>
           ) : (
-            <Text className="text-slate-500 italic mb-3 ml-1">Graf se zobrazí po zapsání výkonu na 1 opakování.</Text>
+            <Text className="text-slate-500 italic mb-3 ml-1">{isCs ? "Graf se zobrazí po zapsání výkonu na 1 opakování." : "The chart will appear after logging a 1-rep performance."}</Text>
           )}
 
           <View className="flex-row gap-2">
             <TextInput placeholder="Kg" keyboardType="numeric" value={quickForms[g.id]?.weight || ""} onChangeText={(val) => handleQuickAddChange(g.id, 'weight', val)} className="flex-1 bg-slate-700 text-white p-2 rounded-lg border border-slate-600" placeholderTextColor="#94a3b8" />
-            <TextInput placeholder="Opakování" keyboardType="numeric" value={quickForms[g.id]?.reps || ""} onChangeText={(val) => handleQuickAddChange(g.id, 'reps', val)} className="flex-1 bg-slate-700 text-white p-2 rounded-lg border border-slate-600" placeholderTextColor="#94a3b8" />
+            <TextInput placeholder={isCs ? "Opakování" : "Reps"} keyboardType="numeric" value={quickForms[g.id]?.reps || ""} onChangeText={(val) => handleQuickAddChange(g.id, 'reps', val)} className="flex-1 bg-slate-700 text-white p-2 rounded-lg border border-slate-600" placeholderTextColor="#94a3b8" />
             <TouchableOpacity onPress={() => handleQuickAddSubmit(g.id)} className="bg-green-600 px-4 justify-center items-center rounded-lg"><Text className="text-white font-bold text-lg">+</Text></TouchableOpacity>
           </View>
         </View>
@@ -358,7 +365,7 @@ export default function StatsScreen() {
 
       {workoutLogs.length > 0 && (
         <View className="bg-slate-800 p-3 rounded-xl mb-12">
-          <Text className="text-slate-400 font-bold mb-2">Historie všech výkonů:</Text>
+          <Text className="text-slate-400 font-bold mb-2">{isCs ? "Historie všech výkonů:" : "Performance history:"}</Text>
           {workoutLogs.slice(0, 10).map(log => {
             const exInfo: any = log.exercises;
             const exName = Array.isArray(exInfo) ? exInfo[0]?.name : exInfo?.name;
@@ -366,9 +373,9 @@ export default function StatsScreen() {
               <View key={log.id} className="flex-row justify-between items-center bg-slate-700 p-2 rounded mb-2">
                 <View>
                   <Text className="text-white font-bold">{exName}</Text>
-                  <Text className="text-slate-400 text-xs">{new Date(log.date).toLocaleDateString('cs-CZ')} • {log.weight_lifted} kg x {log.reps_done} rep</Text>
+                  <Text className="text-slate-400 text-xs">{new Date(log.date).toLocaleDateString(isCs ? 'cs-CZ' : 'en-US')} • {log.weight_lifted} kg x {log.reps_done} {isCs ? "opak." : "reps"}</Text>
                 </View>
-                <TouchableOpacity onPress={() => handleDeleteWorkout(log.id)} className="bg-red-500/20 px-3 py-2 rounded"><Text className="text-red-500 font-bold">Smazat</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => handleDeleteWorkout(log.id)} className="bg-red-500/20 px-3 py-2 rounded"><Text className="text-red-500 font-bold">{isCs ? "Smazat" : "Delete"}</Text></TouchableOpacity>
               </View>
             )
           })}

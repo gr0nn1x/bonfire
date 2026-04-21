@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { getStoredLanguage } from "@/lib/locale";
 
 export interface AuthCredentials {
   username: string;
@@ -15,42 +16,50 @@ function normalizeUsername(username: string) {
 function usernameToEmail(username: string) {
   const normalized = normalizeUsername(username);
   if (!normalized) {
-    throw new Error("Vypln uzivatelske jmeno.");
+    throw new Error("Fill in the username.");
   }
   // Supabase email/password auth requires an email. We use a synthetic email
   // so users can log in with just username + password.
   return `${normalized}@bonfire.local`;
 }
 
-function getAuthErrorMessage(error: unknown) {
+async function getAuthErrorMessage(error: unknown) {
+  const language = await getStoredLanguage();
+  const isCs = language === "cs";
   const rawMessage =
-    error instanceof Error ? error.message : "Nepodarilo se dokoncit prihlaseni.";
+    error instanceof Error
+      ? error.message
+      : isCs
+        ? "Nepodarilo se dokoncit prihlaseni."
+        : "Could not complete sign in.";
   const normalized = rawMessage.toLowerCase();
 
   if (normalized.includes("invalid login credentials")) {
-    return "Nespravny email nebo heslo.";
+    return isCs ? "Nespravny email nebo heslo." : "Incorrect username or password.";
   }
 
   if (
     normalized.includes("email not confirmed") ||
     normalized.includes("not confirmed")
   ) {
-    return "Prihlaseni nejde, protoze je zapnute overovani emailu. V Supabase vypni Email confirmations.";
+    return isCs
+      ? "Prihlaseni nejde, protoze je zapnute overovani emailu. V Supabase vypni Email confirmations."
+      : "Sign-in is blocked because email verification is enabled. Turn off Email confirmations in Supabase.";
   }
 
   if (normalized.includes("already registered")) {
-    return "Uzivatelske jmeno uz existuje.";
+    return isCs ? "Uzivatelske jmeno uz existuje." : "That username already exists.";
   }
 
   if (
     normalized.includes("password should be at least") ||
     normalized.includes("password is too short")
   ) {
-    return "Heslo musi mit alespon 6 znaku.";
+    return isCs ? "Heslo musi mit alespon 6 znaku." : "Password must be at least 6 characters long.";
   }
 
   if (normalized.includes("invalid email")) {
-    return "Uzivatelske jmeno neni platne.";
+    return isCs ? "Uzivatelske jmeno neni platne." : "The username is not valid.";
   }
 
   if (
@@ -59,7 +68,9 @@ function getAuthErrorMessage(error: unknown) {
     normalized.includes("over_email_send_rate") ||
     normalized.includes("too many requests")
   ) {
-    return "Supabase docasne omezil odesilani emailu (limit prihlaseni/registraci). Zkus to za chvili, nebo v Supabase Authentication vypni potvrzeni emailu, aby se pri registraci nic neposilalo.";
+    return isCs
+      ? "Supabase docasne omezil odesilani emailu (limit prihlaseni/registraci). Zkus to za chvili, nebo v Supabase Authentication vypni potvrzeni emailu, aby se pri registraci nic neposilalo."
+      : "Supabase has temporarily rate-limited sign-in/sign-up emails. Try again shortly, or disable email confirmations in Supabase Authentication.";
   }
 
   return rawMessage;
@@ -84,7 +95,7 @@ export async function signUp({
   });
 
   if (error) {
-    throw new Error(getAuthErrorMessage(error));
+    throw new Error(await getAuthErrorMessage(error));
   }
 
   return data;
@@ -123,7 +134,7 @@ export async function signIn({ username, password }: AuthCredentials) {
   });
 
   if (error) {
-    throw new Error(getAuthErrorMessage(error));
+    throw new Error(await getAuthErrorMessage(error));
   }
 
   return data;
@@ -133,6 +144,6 @@ export async function signOut() {
   const { error } = await supabase.auth.signOut();
 
   if (error) {
-    throw new Error(getAuthErrorMessage(error));
+    throw new Error(await getAuthErrorMessage(error));
   }
 }

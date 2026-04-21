@@ -1,4 +1,5 @@
 import { View, Text } from "react-native";
+import { useLanguage } from "@/hooks/useLanguage";
 
 interface AchievementProps {
   title: string;
@@ -9,6 +10,8 @@ interface AchievementProps {
 }
 
 export function AchievementCard({ title, description, currentValue, targets, unit }: AchievementProps) {
+  const { language } = useLanguage();
+  const isCs = language === "cs";
   // Zjistíme, na jakém levelu uživatel je
   let level = 0;
   for (let i = 0; i < targets.length; i++) {
@@ -31,7 +34,7 @@ export function AchievementCard({ title, description, currentValue, targets, uni
       <View className="flex-row justify-between items-center mb-1">
         <Text className="text-white font-bold text-lg">{title}</Text>
         <View className="bg-orange-500/20 px-2 py-1 rounded-lg border border-orange-500/30">
-          <Text className="text-orange-400 font-bold text-xs uppercase">Level {level}</Text>
+          <Text className="text-orange-400 font-bold text-xs uppercase">{isCs ? "Level" : "Level"} {level}</Text>
         </View>
       </View>
       
@@ -40,7 +43,7 @@ export function AchievementCard({ title, description, currentValue, targets, uni
       <View className="flex-row justify-between mb-1">
         <Text className="text-slate-300 text-xs font-bold">{currentValue.toLocaleString()} {unit}</Text>
         {level < targets.length && (
-          <Text className="text-slate-500 text-xs">Cíl: {nextTarget.toLocaleString()} {unit}</Text>
+          <Text className="text-slate-500 text-xs">{isCs ? "Cíl" : "Goal"}: {nextTarget.toLocaleString()} {unit}</Text>
         )}
       </View>
 

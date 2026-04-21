@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, Modal, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { useLanguage } from "@/hooks/useLanguage";
 
 // Standardní RTS RPE Tabulka (Reps 1-10, RPE 7-10) - hodnoty v %
 const RPE_CHART: Record<number, number[]> = {
@@ -18,6 +19,8 @@ interface RpeCalculatorProps {
 }
 
 export function RpeCalculator({ isVisible, onClose }: RpeCalculatorProps) {
+  const { language } = useLanguage();
+  const isCs = language === "cs";
   const [weight, setWeight] = useState('');
   const [reps, setReps] = useState('5');
   const [rpe, setRpe] = useState('8');
@@ -51,29 +54,29 @@ export function RpeCalculator({ isVisible, onClose }: RpeCalculatorProps) {
         <View className="bg-slate-800 rounded-t-[32px] border-t border-slate-700 h-[85%]">
           
           <View className="p-5 flex-row justify-between items-center border-b border-slate-700">
-            <Text className="text-white text-xl font-bold">Silová & RPE Kalkulačka 🧮</Text>
+            <Text className="text-white text-xl font-bold">{isCs ? "Silová & RPE Kalkulačka 🧮" : "Strength & RPE Calculator 🧮"}</Text>
             <TouchableOpacity onPress={onClose} className="bg-slate-700 h-8 w-8 rounded-full items-center justify-center">
               <Text className="text-white font-bold text-lg leading-none mb-1">×</Text>
             </TouchableOpacity>
           </View>
 
           <ScrollView className="p-6" keyboardShouldPersistTaps="handled">
-            <Text className="text-slate-400 mb-6 text-sm">Zadej svůj nedávný těžký set. Aplikace ti spočítá odhadovanou maximálku (e1RM) a doporučí váhy pro další série.</Text>
+            <Text className="text-slate-400 mb-6 text-sm">{isCs ? "Zadej svůj nedávný těžký set. Aplikace ti spočítá odhadovanou maximálku (e1RM) a doporučí váhy pro další série." : "Enter a recent hard set. The app will estimate your e1RM and suggest weights for your next sets."}</Text>
 
             <View className="flex-row gap-4 mb-8">
               <View className="flex-1">
-                <Text className="text-slate-500 font-bold uppercase text-[10px] mb-2 ml-1">Váha (kg)</Text>
+                <Text className="text-slate-500 font-bold uppercase text-[10px] mb-2 ml-1">{isCs ? "Váha (kg)" : "Weight (kg)"}</Text>
                 <TextInput 
                   keyboardType="numeric" 
                   value={weight} 
                   onChangeText={setWeight} 
-                  placeholder="Např. 100" 
+                  placeholder={isCs ? "Např. 100" : "E.g. 100"} 
                   placeholderTextColor="#475569"
                   className="bg-slate-900 text-white font-bold text-xl p-4 rounded-2xl border border-slate-700 text-center" 
                 />
               </View>
               <View className="flex-1">
-                <Text className="text-slate-500 font-bold uppercase text-[10px] mb-2 ml-1">Opakování (1-10)</Text>
+                <Text className="text-slate-500 font-bold uppercase text-[10px] mb-2 ml-1">{isCs ? "Opakování (1-10)" : "Reps (1-10)"}</Text>
                 <TextInput 
                   keyboardType="numeric" 
                   value={reps} 
@@ -95,14 +98,14 @@ export function RpeCalculator({ isVisible, onClose }: RpeCalculatorProps) {
             {isValid ? (
               <View>
                 <View className="items-center bg-orange-500/10 p-6 rounded-[32px] border border-orange-500/30 mb-8">
-                  <Text className="text-orange-500 font-bold uppercase tracking-widest text-xs mb-1">Odhadovaná maximálka</Text>
+                  <Text className="text-orange-500 font-bold uppercase tracking-widest text-xs mb-1">{isCs ? "Odhadovaná maximálka" : "Estimated 1RM"}</Text>
                   <Text className="text-white font-black text-5xl">{rounded1RM} <Text className="text-xl text-orange-400">kg</Text></Text>
                 </View>
 
-                <Text className="text-white font-bold text-lg mb-4">Cílové váhy pro další trénink</Text>
+                <Text className="text-white font-bold text-lg mb-4">{isCs ? "Cílové váhy pro další trénink" : "Target weights for your next session"}</Text>
                 <View className="bg-slate-900 rounded-2xl border border-slate-700 overflow-hidden mb-10">
                   <View className="flex-row bg-slate-800 p-3 border-b border-slate-700">
-                    <Text className="flex-1 text-slate-400 font-bold text-xs text-center">Opak.</Text>
+                    <Text className="flex-1 text-slate-400 font-bold text-xs text-center">{isCs ? "Opak." : "Reps"}</Text>
                     <Text className="flex-1 text-slate-400 font-bold text-xs text-center">RPE 8</Text>
                     <Text className="flex-1 text-slate-400 font-bold text-xs text-center">RPE 9</Text>
                     <Text className="flex-1 text-orange-400 font-bold text-xs text-center">RPE 10</Text>
@@ -120,7 +123,7 @@ export function RpeCalculator({ isVisible, onClose }: RpeCalculatorProps) {
               </View>
             ) : (
               <View className="items-center p-8 opacity-50">
-                <Text className="text-slate-400 text-center italic">Zadej platné hodnoty do políček výše pro zobrazení tabulky.</Text>
+                <Text className="text-slate-400 text-center italic">{isCs ? "Zadej platné hodnoty do políček výše pro zobrazení tabulky." : "Enter valid values above to show the table."}</Text>
               </View>
             )}
           </ScrollView>

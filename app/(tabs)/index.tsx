@@ -7,8 +7,7 @@ import { PlateCalculator } from "@/components/PlateCalculator";
 import { RpeCalculator } from "@/components/RpeCalculator"; // NOVÉ
 import { DotsCalculator } from "@/components/DotsCalculator";
 import { Trophy, Calculator } from 'lucide-react-native';
-
-const DAYS_NAMES = ["Ne", "Po", "Út", "St", "Čt", "Pá", "So"];
+import { useLanguage } from "@/hooks/useLanguage";
 
 const getLocalDateString = (date: Date) => {
   const year = date.getFullYear();
@@ -18,6 +17,11 @@ const getLocalDateString = (date: Date) => {
 };
 
 export default function HomeScreen() {
+  const { language } = useLanguage();
+  const isCs = language === "cs";
+  const dayNames = isCs
+    ? ["Ne", "Po", "Út", "St", "Čt", "Pá", "So"]
+    : ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
   const [loading, setLoading] = useState(true);
   const [activePlan, setActivePlan] = useState<any>(null);
   const [todayWorkout, setTodayWorkout] = useState<any>(null);
@@ -172,7 +176,7 @@ export default function HomeScreen() {
       fetchData(); 
       
     } catch (e: any) { 
-      Alert.alert("Chyba při ukládání", e.message); 
+      Alert.alert(isCs ? "Chyba při ukládání" : "Save failed", e.message); 
       console.error(e);
     }
   };
@@ -189,7 +193,7 @@ export default function HomeScreen() {
   return (
     <ScreenContainer>
      <View className="mb-6 flex-row justify-between items-center">
-  <Text className="text-3xl font-bold text-white">Bonfire Fitness - Git Gud!</Text>
+  <Text className="text-3xl font-bold text-white">{isCs ? "Bonfire Fitness - Makej!" : "Bonfire Fitness - Git Gud!"}</Text>
   <View className="flex-row gap-2">
     {/* DOTS Tlačidlo */}
     <TouchableOpacity onPress={() => setShowDotsCalc(true)} className="bg-slate-800 p-2.5 rounded-full border border-slate-700">
@@ -212,7 +216,7 @@ export default function HomeScreen() {
           const isDone = completedDates.includes(dateISO);
           return (
             <TouchableOpacity key={i} onPress={() => handleDateSelect(date)} className={`items-center p-3 rounded-xl ${isSelected ? 'bg-orange-500' : ''}`}>
-              <Text className={`text-xs ${isSelected ? 'text-white' : 'text-slate-500'}`}>{DAYS_NAMES[date.getDay()]}</Text>
+              <Text className={`text-xs ${isSelected ? 'text-white' : 'text-slate-500'}`}>{dayNames[date.getDay()]}</Text>
               <Text className={`text-lg font-bold ${isSelected ? 'text-white' : (isDone ? 'text-green-400' : (isPlanned ? 'text-orange-400' : 'text-slate-300'))}`}>{date.getDate()}</Text>
               <View className={`w-1.5 h-1.5 rounded-full mt-1 ${isDone ? 'bg-green-500' : (isPlanned ? (isSelected ? 'bg-white' : 'bg-orange-500') : 'bg-transparent')}`} />
             </TouchableOpacity>
@@ -225,19 +229,25 @@ export default function HomeScreen() {
           todayWorkout ? (
             <View>
               <Text className="text-orange-500 font-bold uppercase tracking-widest text-[10px] mb-1">
-                {completedDates.includes(getLocalDateString(selectedDate)) ? "✓ DOKONČENO" : "NAPLÁNOVÁNO"}
+                {completedDates.includes(getLocalDateString(selectedDate))
+                  ? isCs
+                    ? "✓ DOKONČENO"
+                    : "✓ COMPLETED"
+                  : isCs
+                    ? "NAPLÁNOVÁNO"
+                    : "PLANNED"}
               </Text>
               <Text className="text-2xl font-bold text-white mb-1">{todayWorkout.name}</Text>
               {activePlan.description ? <Text className="text-slate-400 text-xs mb-4 italic">{activePlan.description}</Text> : null}
               <TouchableOpacity onPress={startWorkout} className={`p-4 rounded-2xl mt-6 items-center ${completedDates.includes(getLocalDateString(selectedDate)) ? 'bg-slate-700 border border-green-500' : 'bg-orange-500'}`}>
-                <Text className="text-white font-bold text-lg">{completedDates.includes(getLocalDateString(selectedDate)) ? "ZOBRAZIT / UPRAVIT" : "ZAČÍT CVIČIT"}</Text>
+                <Text className="text-white font-bold text-lg">{completedDates.includes(getLocalDateString(selectedDate)) ? (isCs ? "ZOBRAZIT / UPRAVIT" : "VIEW / EDIT") : isCs ? "ZAČÍT CVIČIT" : "START WORKOUT"}</Text>
               </TouchableOpacity>
             </View>
           ) : (
-            <View className="items-center py-4"><Text className="text-slate-400 italic">Dnes nemáš tréninkový den. 🧘</Text></View>
+            <View className="items-center py-4"><Text className="text-slate-400 italic">{isCs ? "Dnes nemáš tréninkový den. 🧘" : "No workout is planned for today. 🧘"}</Text></View>
           )
         ) : (
-          <View className="items-center py-4"><Text className="text-white font-bold italic">Nemáš aktivní plán.</Text></View>
+          <View className="items-center py-4"><Text className="text-white font-bold italic">{isCs ? "Nemáš aktivní plán." : "You don't have an active plan."}</Text></View>
         )}
       </View>
 
@@ -246,7 +256,7 @@ export default function HomeScreen() {
           <View className="p-6 pt-12 bg-slate-800 flex-row justify-between items-center border-b border-slate-700">
             <View className="flex-1">
               <Text className="text-white text-xl font-bold" numberOfLines={1}>{todayWorkout?.name}</Text>
-              <Text className="text-orange-500 font-bold text-xs">{selectedDate.toLocaleDateString('cs-CZ')}</Text>
+              <Text className="text-orange-500 font-bold text-xs">{selectedDate.toLocaleDateString(isCs ? 'cs-CZ' : 'en-US')}</Text>
             </View>
             <TouchableOpacity onPress={() => setIsExecuting(false)} className="bg-slate-700 h-10 w-10 rounded-full items-center justify-center">
               <Text className="text-white font-bold text-lg">×</Text>
@@ -254,18 +264,18 @@ export default function HomeScreen() {
           </View>
 
           <ScrollView className="p-4" contentContainerStyle={{ paddingBottom: 150 }}>
-            {activePlan?.description && (
-              <View className="bg-slate-800/50 p-4 rounded-2xl mb-6 border border-slate-700">
-                <Text className="text-orange-500 font-bold text-[10px] uppercase mb-1">Cíl šablony</Text>
-                <Text className="text-slate-300 text-xs italic">{activePlan.description}</Text>
-              </View>
-            )}
+           {activePlan?.description ? (
+  <View className="bg-slate-800/50 p-4 rounded-2xl mb-6 border border-slate-700">
+    <Text className="text-orange-500 font-bold text-[10px] uppercase mb-1">{isCs ? "Cíl šablony" : "Template goal"}</Text>
+    <Text className="text-slate-300 text-xs italic">{activePlan.description}</Text>
+  </View>
+) : null}
 
             {sessionExercises.map((ex, idx) => (
               <View key={idx} className={`mb-6 p-5 rounded-[32px] border ${ex.done ? 'bg-green-900/10 border-green-500/50' : 'bg-slate-800 border-slate-700'}`}>
                 <View className="flex-row justify-between items-center mb-4">
                   <View className="flex-1">
-                    <Text className="text-xl font-bold text-white">{ex.exercises?.name || "Neznámý cvik"}</Text>
+                    <Text className="text-xl font-bold text-white">{ex.exercises?.name || (isCs ? "Neznámý cvik" : "Unknown exercise")}</Text>
                     {ex.template_notes ? <Text className="text-orange-300/80 text-[11px] italic mt-1">💡 {ex.template_notes}</Text> : null}
                   </View>
                   
@@ -289,7 +299,7 @@ export default function HomeScreen() {
                 <View className="gap-3">
                   <View className="flex-row gap-2">
                     <View className="flex-1">
-                      <Text className="text-slate-500 text-[9px] font-bold mb-1 uppercase ml-1">Váha (kg)</Text>
+                      <Text className="text-slate-500 text-[9px] font-bold mb-1 uppercase ml-1">{isCs ? "Váha (kg)" : "Weight (kg)"}</Text>
                       <TextInput 
                         keyboardType="numeric" 
                         value={ex.actual_weight} 
@@ -301,11 +311,11 @@ export default function HomeScreen() {
                         className="bg-slate-900 text-white p-3 rounded-xl border border-slate-700 text-center font-bold" 
                       />
                       <TouchableOpacity className="mt-1 self-center" onPress={() => { setCurrentWeightForCalc(parseFloat(ex.actual_weight) || 0); setShowPlateCalc(true); }}>
-                        <Text className="text-orange-500 text-[10px] font-bold italic">🧮 KOTOUČE</Text>
+                        <Text className="text-orange-500 text-[10px] font-bold italic">{isCs ? "🧮 KOTOUČE" : "🧮 PLATES"}</Text>
                       </TouchableOpacity>
                     </View>
                     <View className="flex-1">
-                      <Text className="text-slate-500 text-[9px] font-bold mb-1 uppercase ml-1">Opakování</Text>
+                      <Text className="text-slate-500 text-[9px] font-bold mb-1 uppercase ml-1">{isCs ? "Opakování" : "Reps"}</Text>
                       <TextInput 
                         keyboardType="numeric" 
                         value={ex.actual_reps} 
@@ -325,14 +335,14 @@ export default function HomeScreen() {
                       <TextInput keyboardType="numeric" value={ex.actual_rpe} onChangeText={(v) => { const n = [...sessionExercises]; n[idx].actual_rpe = v; setSessionExercises(n); }} className="bg-slate-900 text-white p-3 rounded-xl border border-slate-700 text-center" placeholder="-" placeholderTextColor="#444" />
                     </View>
                     <View className="flex-1">
-                      <Text className="text-slate-500 text-[9px] font-bold mb-1 uppercase ml-1">Zátěž (%)</Text>
+                      <Text className="text-slate-500 text-[9px] font-bold mb-1 uppercase ml-1">{isCs ? "Zátěž (%)" : "Load (%)"}</Text>
                       <TextInput keyboardType="numeric" value={ex.actual_percentage} onChangeText={(v) => { const n = [...sessionExercises]; n[idx].actual_percentage = v; setSessionExercises(n); }} className="bg-slate-900 text-white p-3 rounded-xl border border-slate-700 text-center" placeholder="-" placeholderTextColor="#444" />
                     </View>
                   </View>
 
                   <View>
-                    <Text className="text-slate-500 text-[9px] font-bold mb-1 uppercase ml-1">Tvoje poznámka</Text>
-                    <TextInput multiline value={ex.actual_notes} onChangeText={(v) => { const n = [...sessionExercises]; n[idx].actual_notes = v; setSessionExercises(n); }} className="bg-slate-900 text-white p-3 rounded-xl border border-slate-700 text-xs italic" placeholder="Dneska to šlo lehce..." placeholderTextColor="#444" />
+                    <Text className="text-slate-500 text-[9px] font-bold mb-1 uppercase ml-1">{isCs ? "Tvoje poznámka" : "Your note"}</Text>
+                    <TextInput multiline value={ex.actual_notes} onChangeText={(v) => { const n = [...sessionExercises]; n[idx].actual_notes = v; setSessionExercises(n); }} className="bg-slate-900 text-white p-3 rounded-xl border border-slate-700 text-xs italic" placeholder={isCs ? "Dneska to šlo lehce..." : "Today felt easy..."} placeholderTextColor="#444" />
                   </View>
                 </View>
               </View>
@@ -341,7 +351,7 @@ export default function HomeScreen() {
 
           <View className="p-6 bg-slate-900 border-t border-slate-800 shadow-2xl">
             <TouchableOpacity onPress={saveWorkoutSession} className="bg-green-600 p-5 rounded-2xl items-center shadow-lg">
-              <Text className="text-white font-bold text-xl uppercase tracking-widest italic">Uložit trénink ✓</Text>
+              <Text className="text-white font-bold text-xl uppercase tracking-widest italic">{isCs ? "Uložit trénink ✓" : "Save workout ✓"}</Text>
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>

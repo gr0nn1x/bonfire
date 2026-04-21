@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { calculateStatsFromLogs, CalculatedStats } from "@/lib/achievements";
 import { AchievementSection } from "@/components/AchievementSection";
 import { removeFriend } from "@/lib/friends";
+import { useLanguage } from "@/hooks/useLanguage";
 // Ujisti se, že importuješ Alert
 
 const screenWidth = Dimensions.get("window").width;
@@ -15,6 +16,8 @@ const DAYS_NAMES_SHORT = ["?", "Po", "Út", "St", "Čt", "Pá", "So", "Ne"];
 export default function FriendProfileScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const { language } = useLanguage();
+  const isCs = language === "cs";
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null);
@@ -133,10 +136,10 @@ export default function FriendProfileScreen() {
           await supabase.from('plan_exercises').insert(exToInsert);
         }
       }
-      Alert.alert("Úspěch!", "Plán zkopírován.");
+      Alert.alert(isCs ? "Úspěch!" : "Success!", isCs ? "Plán zkopírován." : "Plan copied.");
       router.push("/plans");
     } catch (e: any) {
-      Alert.alert("Chyba", e.message);
+      Alert.alert(isCs ? "Chyba" : "Error", e.message);
     } finally {
       setIsCopying(false);
     }
@@ -154,30 +157,30 @@ export default function FriendProfileScreen() {
     };
 
     if (Platform.OS === 'web') {
-      const confirmed = window.confirm(`Opravdu chceš odebrat uživatele @${username}?`);
+      const confirmed = window.confirm(isCs ? `Opravdu chceš odebrat uživatele @${username}?` : `Do you really want to remove @${username}?`);
       if (confirmed) {
         try {
           await removeFriend(id as string);
           goBackSafely(); // <--- Použijeme novou bezpečnou funkci
         } catch (e) {
-          alert("Nepodařilo se odebrat přítele.");
+          alert(isCs ? "Nepodařilo se odebrat přítele." : "Could not remove friend.");
         }
       }
     } else {
       Alert.alert(
-        "Odebrat z přátel",
-        `Opravdu chceš odebrat uživatele @${username}?`,
+        isCs ? "Odebrat z přátel" : "Remove friend",
+        isCs ? `Opravdu chceš odebrat uživatele @${username}?` : `Do you really want to remove @${username}?`,
         [
-          { text: "Zrušit", style: "cancel" },
+          { text: isCs ? "Zrušit" : "Cancel", style: "cancel" },
           { 
-            text: "Odebrat", 
+            text: isCs ? "Odebrat" : "Remove", 
             style: "destructive",
             onPress: async () => {
               try {
                 await removeFriend(id as string);
                 goBackSafely(); // <--- Použijeme novou bezpečnou funkci
               } catch (e) {
-                Alert.alert("Chyba", "Nepodařilo se odebrat přítele.");
+                Alert.alert(isCs ? "Chyba" : "Error", isCs ? "Nepodařilo se odebrat přítele." : "Could not remove friend.");
               }
             }
           }
@@ -190,7 +193,7 @@ export default function FriendProfileScreen() {
 
   return (
     <ScrollView className="flex-1 bg-slate-900 p-4">
-      <Stack.Screen options={{ title: data.profile?.username || "Profil", headerBackTitle: "Zpět" }} />
+      <Stack.Screen options={{ title: data.profile?.username || (isCs ? "Profil" : "Profile"), headerBackTitle: isCs ? "Zpět" : "Back" }} />
       
       {/* --- HLAVIČKA PROFILU (PŘIDÁNO BIO A AVATAR) --- */}
       <View className="bg-slate-800 p-5 rounded-[32px] border border-slate-700 mb-6 mt-2">
@@ -224,7 +227,7 @@ export default function FriendProfileScreen() {
           onPress={handleRemoveFriend}
           className="mt-4 bg-red-900/40 p-3 rounded-xl border border-red-500/50 items-center"
         >
-          <Text className="text-red-400 font-bold">🗑️ Odebrat z přátel</Text>
+          <Text className="text-red-400 font-bold">{isCs ? "🗑️ Odebrat z přátel" : "🗑️ Remove friend"}</Text>
         </TouchableOpacity>
               </View>
            ) : (
@@ -241,9 +244,9 @@ export default function FriendProfileScreen() {
       <AchievementSection stats={stats} />
 
       {/* --- TRÉNINKOVÉ PLÁNY --- */}
-      <Text className="text-xl font-bold text-white mb-4 mt-6">Tréninkové Plány</Text>
+      <Text className="text-xl font-bold text-white mb-4 mt-6">{isCs ? "Tréninkové Plány" : "Workout Plans"}</Text>
       {data.plans.length === 0 ? (
-        <Text className="text-slate-500 italic">Uživatel nemá žádné plány.</Text>
+        <Text className="text-slate-500 italic">{isCs ? "Uživatel nemá žádné plány." : "This user has no plans."}</Text>
       ) : (
         data.plans.map((p: any) => (
           <View key={p.id} className="bg-slate-800 rounded-2xl mb-4 border border-slate-700 overflow-hidden">
@@ -253,10 +256,10 @@ export default function FriendProfileScreen() {
             >
               <View className="flex-1">
                 <Text className="text-white font-bold text-lg">{p.name || p.title}</Text>
-                <Text className="text-slate-400 text-xs">{p.plan_days?.length || 0} tréninkové dny</Text>
+                <Text className="text-slate-400 text-xs">{p.plan_days?.length || 0} {isCs ? "tréninkové dny" : "workout days"}</Text>
               </View>
               <Text className="text-orange-500 font-bold">
-                {expandedPlanId === p.id ? "Zavřít ▲" : "Detail ▼"}
+                {expandedPlanId === p.id ? (isCs ? "Zavřít ▲" : "Close ▲") : isCs ? "Detail ▼" : "Details ▼"}
               </Text>
             </TouchableOpacity>
 
@@ -265,7 +268,7 @@ export default function FriendProfileScreen() {
                 {p.plan_days?.sort((a: any, b: any) => a.day_of_week - b.day_of_week).map((day: any) => (
                   <View key={day.id} className="mb-3">
                     <Text className="text-orange-400 font-bold mb-1">
-                      {DAYS_NAMES_SHORT[day.day_of_week]} - {day.name || "Trénink"}
+                      {DAYS_NAMES_SHORT[day.day_of_week]} - {day.name || (isCs ? "Trénink" : "Workout")}
                     </Text>
                     {day.plan_exercises?.map((ex: any) => (
                       <Text key={ex.id} className="text-slate-300 text-sm ml-2">
@@ -284,7 +287,7 @@ export default function FriendProfileScreen() {
                     alignItems: 'center' 
                   })}
                 >
-                  <Text className="text-white font-bold">📥 Kopírovat k sobě</Text>
+                  <Text className="text-white font-bold">{isCs ? "📥 Kopírovat k sobě" : "📥 Copy to my plans"}</Text>
                 </Pressable>
               </View>
             )}
@@ -295,7 +298,7 @@ export default function FriendProfileScreen() {
       {/* --- GRAFY VÁHY --- */}
       {data.weight && (
         <View className="mb-6">
-          <Text className="text-xl font-bold text-white mt-6 mb-4">Vývoj Váhy</Text>
+          <Text className="text-xl font-bold text-white mt-6 mb-4">{isCs ? "Vývoj Váhy" : "Weight Progress"}</Text>
           <View className="rounded-xl overflow-hidden bg-slate-800/50 p-2">
             <LineChart 
               data={data.weight} 
@@ -315,7 +318,7 @@ export default function FriendProfileScreen() {
       )}
 
       {/* --- GRAFY VÝKONŮ --- */}
-      <Text className="text-xl font-bold text-white mt-6 mb-4">Výkony (1RM)</Text>
+      <Text className="text-xl font-bold text-white mt-6 mb-4">{isCs ? "Výkony (1RM)" : "Performance (1RM)"}</Text>
       {data.graphs.map((g: any, i: number) => (
         <View key={i} className="mb-8 bg-slate-800/30 p-3 rounded-2xl border border-slate-800">
           <Text className="text-slate-200 font-bold mb-2 ml-1 text-lg">{g.name}</Text>

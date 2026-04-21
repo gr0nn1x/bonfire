@@ -18,6 +18,7 @@ create table if not exists public.profiles (
   username text unique,
   bio text,
   avatar_url text,
+  language text not null default 'en' check (language in ('en', 'cs')),
   strength_points integer not null default 0 check (strength_points >= 0),
   level integer not null default 1 check (level >= 1),
   current_streak integer not null default 0 check (current_streak >= 0),
@@ -138,11 +139,12 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.profiles (id, username, avatar_url)
+  insert into public.profiles (id, username, avatar_url, language)
   values (
     new.id,
     coalesce(new.raw_user_meta_data ->> 'username', split_part(new.email, '@', 1)),
-    new.raw_user_meta_data ->> 'avatar_url'
+    new.raw_user_meta_data ->> 'avatar_url',
+    'en'
   )
   on conflict (id) do nothing;
 

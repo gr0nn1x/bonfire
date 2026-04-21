@@ -3,6 +3,7 @@
     "name": "Bonfire Fitness",
     "slug": "bonfire-fitness",
     "scheme": "bonfire",
+    "icon": "./assets/logo.png",
     "web": {
       "bundler": "metro"
     },
@@ -11,6 +12,22 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#1e1b2e"
+      },
+      "package": "com.gr0nn1x.bonfirefitness"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f0b3372b-14eb-4895-b336-1a3303e36360"
+      }
     }
   }
 }

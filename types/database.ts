@@ -15,6 +15,7 @@ export interface Profile {
   username: string | null;
   bio: string | null;
   avatar_url: string | null;
+  language: "en" | "cs";
   strength_points: number;
   level: number;
 }

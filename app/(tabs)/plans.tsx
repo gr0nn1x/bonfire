@@ -3,8 +3,9 @@ import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator,
 import { supabase } from "@/lib/supabase";
 import { useRouter } from 'expo-router';
 import { Search, Globe, Lock } from 'lucide-react-native';
+import { useLanguage } from "@/hooks/useLanguage";
 
-import { EXERCISE_DATABASE, MUSCLE_LABELS } from '@/lib/muscleMap';
+import { EXERCISE_DATABASE, getLocalizedExerciseName, getLocalizedMuscleLabels } from '@/lib/muscleMap';
 
 type BuilderExercise = {
   tempId: string;
@@ -29,6 +30,9 @@ const DAYS_OF_WEEK = ["Po", "Út", "St", "Čt", "Pá", "So", "Ne"];
 
 export default function PlansScreen() {
   const router = useRouter(); 
+  const { language } = useLanguage();
+  const isCs = language === "cs";
+  const muscleLabels = getLocalizedMuscleLabels(language);
   
   const [viewMode, setViewMode] = useState<'list' | 'builder'>('list');
   const [plans, setPlans] = useState<any[]>([]);
@@ -81,18 +85,18 @@ export default function PlansScreen() {
         await supabase.from('workout_plans').update({ is_public: false }).eq('id', plan.id);
         fetchPlans();
         if (Platform.OS === 'web') {
-          window.alert("Skryto 🔒\nPlán už není v Tržišti viditelný.");
+          window.alert(isCs ? "Skryto 🔒\nPlán už není v Tržišti viditelný." : "Hidden 🔒\nThe plan is no longer visible in the marketplace.");
         } else {
-          Alert.alert("Skryto 🔒", "Plán už není v Tržišti viditelný.");
+          Alert.alert(isCs ? "Skryto 🔒" : "Hidden 🔒", isCs ? "Plán už není v Tržišti viditelný." : "The plan is no longer visible in the marketplace.");
         }
         return;
       }
 
       if (!plan.description || plan.description.length < 10) {
         if (Platform.OS === 'web') {
-          window.alert("Chybí popis\nAbys mohl plán sdílet, přidej mu přes tlačítko 'Upravit' smysluplný popis (alespoň 10 znaků).");
+          window.alert(isCs ? "Chybí popis\nAbys mohl plán sdílet, přidej mu přes tlačítko 'Upravit' smysluplný popis (alespoň 10 znaků)." : "Description missing\nTo share the plan, add a meaningful description with the Edit button (at least 10 characters).");
         } else {
-          Alert.alert("Chybí popis", "Abys mohl plán sdílet, přidej mu přes tlačítko 'Upravit' smysluplný popis (alespoň 10 znaků).");
+          Alert.alert(isCs ? "Chybí popis" : "Description missing", isCs ? "Abys mohl plán sdílet, přidej mu přes tlačítko 'Upravit' smysluplný popis (alespoň 10 znaků)." : "To share the plan, add a meaningful description with the Edit button (at least 10 characters).");
         }
         return;
       }
@@ -111,9 +115,9 @@ export default function PlansScreen() {
 
       if (totalExercises < 5) {
         if (Platform.OS === 'web') {
-          window.alert(`Málo cviků\nTvůj plán má aktuálně jen ${totalExercises} cviků. Pro sdílení komunitě jich musí mít alespoň 5.`);
+          window.alert(isCs ? `Málo cviků\nTvůj plán má aktuálně jen ${totalExercises} cviků. Pro sdílení komunitě jich musí mít alespoň 5.` : `Not enough exercises\nYour plan currently has only ${totalExercises} exercises. It needs at least 5 to be shared.`);
         } else {
-          Alert.alert("Málo cviků", `Tvůj plán má aktuálně jen ${totalExercises} cviků. Pro sdílení komunitě jich musí mít alespoň 5.`);
+          Alert.alert(isCs ? "Málo cviků" : "Not enough exercises", isCs ? `Tvůj plán má aktuálně jen ${totalExercises} cviků. Pro sdílení komunitě jich musí mít alespoň 5.` : `Your plan currently has only ${totalExercises} exercises. It needs at least 5 to be shared.`);
         }
         return;
       }
@@ -122,15 +126,15 @@ export default function PlansScreen() {
       fetchPlans();
       
       if (Platform.OS === 'web') {
-        window.alert("Sdíleno! 🚀\nTvůj plán je nyní veřejně na Tržišti a může ho kdokoli vidět a použít.");
+        window.alert(isCs ? "Sdíleno! 🚀\nTvůj plán je nyní veřejně na Tržišti a může ho kdokoli vidět a použít." : "Shared! 🚀\nYour plan is now public in the marketplace and anyone can use it.");
       } else {
-        Alert.alert("Sdíleno! 🚀", "Tvůj plán je nyní veřejně na Tržišti a může ho kdokoli vidět a použít.");
+        Alert.alert(isCs ? "Sdíleno! 🚀" : "Shared! 🚀", isCs ? "Tvůj plán je nyní veřejně na Tržišti a může ho kdokoli vidět a použít." : "Your plan is now public in the marketplace and anyone can use it.");
       }
     } catch (e: any) {
       if (Platform.OS === 'web') {
-        window.alert("Chyba: " + e.message);
+        window.alert((isCs ? "Chyba: " : "Error: ") + e.message);
       } else {
-        Alert.alert("Chyba", e.message);
+        Alert.alert(isCs ? "Chyba" : "Error", e.message);
       }
     }
   };
@@ -142,18 +146,18 @@ export default function PlansScreen() {
         if (error) throw error;
         fetchPlans();
       } catch (err: any) { 
-        Alert.alert("Chyba", err.message); 
+        Alert.alert(isCs ? "Chyba" : "Error", err.message); 
       }
     };
 
     if (Platform.OS === 'web') {
-      if (window.confirm("Opravdu chceš smazat celou šablonu?")) {
+      if (window.confirm(isCs ? "Opravdu chceš smazat celou šablonu?" : "Do you really want to delete the whole template?")) {
         executeDeletion();
       }
     } else {
-      Alert.alert("Smazat plán", "Opravdu smazat celou šablonu?", [
-        { text: "Zrušit", style: "cancel" },
-        { text: "Smazat", style: "destructive", onPress: executeDeletion }
+      Alert.alert(isCs ? "Smazat plán" : "Delete plan", isCs ? "Opravdu smazat celou šablonu?" : "Do you really want to delete the whole template?", [
+        { text: isCs ? "Zrušit" : "Cancel", style: "cancel" },
+        { text: isCs ? "Smazat" : "Delete", style: "destructive", onPress: executeDeletion }
       ]);
     }
   };
@@ -193,7 +197,7 @@ export default function PlansScreen() {
       setBuilderDays(loadedDays); 
       setViewMode('builder');
     } catch (e: any) { 
-      Alert.alert("Chyba", e.message); 
+      Alert.alert(isCs ? "Chyba" : "Error", e.message); 
     } finally { 
       setLoading(false); 
     }
@@ -211,7 +215,7 @@ export default function PlansScreen() {
     newDays[dayIndex].exercises.push({ 
       tempId: Math.random().toString(), 
       exercise_id: "", 
-      exercise_name: "Vybrat cvik...", 
+      exercise_name: isCs ? "Vybrat cvik..." : "Choose exercise...", 
       sets: "", 
       reps: "", 
       weight: "", 
@@ -230,7 +234,7 @@ export default function PlansScreen() {
 
   const handleSavePlan = async () => {
     if (!planName.trim()) {
-      Alert.alert("Chyba", "Zadej název plánu.");
+      Alert.alert(isCs ? "Chyba" : "Error", isCs ? "Zadej název plánu." : "Enter a plan name.");
       return;
     }
     
@@ -238,7 +242,7 @@ export default function PlansScreen() {
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Nejsi přihlášen");
+      if (!user) throw new Error(isCs ? "Nejsi přihlášen" : "You are not signed in");
 
       let finalPlanId = editingPlanId;
 
@@ -292,14 +296,14 @@ export default function PlansScreen() {
         }
       }
 
-      Alert.alert("Úspěch!", "Plán uložen.");
+      Alert.alert(isCs ? "Úspěch!" : "Success!", isCs ? "Plán uložen." : "Plan saved.");
       setPlanName(""); 
       setPlanDescription(""); 
       setBuilderDays([]); 
       setEditingPlanId(null); 
       setViewMode('list');
     } catch (e: any) { 
-      Alert.alert("Chyba", e.message); 
+      Alert.alert(isCs ? "Chyba" : "Error", e.message); 
     } finally { 
       setIsSaving(false); 
     }
@@ -353,12 +357,12 @@ export default function PlansScreen() {
       
       setIsSearchOpen(false);
     } catch (e: any) { 
-      Alert.alert("Chyba při ukládání cviku", e.message); 
+      Alert.alert(isCs ? "Chyba při ukládání cviku" : "Exercise save failed", e.message); 
     }
   };
 
   const filteredLocalExercises = EXERCISE_DATABASE.filter(ex => 
-    ex.name.toLowerCase().includes(searchQuery.toLowerCase())
+    getLocalizedExerciseName(ex, language).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // -------------------------------------------------------------
@@ -371,7 +375,7 @@ export default function PlansScreen() {
           
           <View className="flex-row justify-between items-center mb-6 mt-2">
             <Text className="text-3xl font-bold text-white">
-              {editingPlanId ? "Úprava" : "Nový plán"}
+              {editingPlanId ? (isCs ? "Úprava" : "Edit plan") : isCs ? "Nový plán" : "New plan"}
             </Text>
             <TouchableOpacity 
               onPress={() => { 
@@ -383,12 +387,12 @@ export default function PlansScreen() {
               }} 
               className="bg-slate-800 px-4 py-2 rounded-lg"
             >
-              <Text className="text-slate-300 font-bold">Zpět</Text>
+              <Text className="text-slate-300 font-bold">{isCs ? "Zpět" : "Back"}</Text>
             </TouchableOpacity>
           </View>
 
           <TextInput 
-            placeholder="Název plánu" 
+            placeholder={isCs ? "Název plánu" : "Plan name"} 
             placeholderTextColor="#64748b" 
             value={planName} 
             onChangeText={setPlanName} 
@@ -396,7 +400,7 @@ export default function PlansScreen() {
           />
           
           <TextInput 
-            placeholder="Popis plánu (cil, délka trvání...)" 
+            placeholder={isCs ? "Popis plánu (cil, délka trvání...)" : "Plan description (goal, duration...)"} 
             placeholderTextColor="#64748b" 
             value={planDescription} 
             onChangeText={setPlanDescription} 
@@ -408,14 +412,14 @@ export default function PlansScreen() {
             <View key={day.tempId} className="bg-slate-800/80 p-4 rounded-xl mb-6 border border-slate-700">
               
               <View className="flex-row justify-between items-center mb-4">
-                <Text className="text-xl font-bold text-white">Den {dIdx + 1}</Text>
+                <Text className="text-xl font-bold text-white">{isCs ? "Den" : "Day"} {dIdx + 1}</Text>
                 <TouchableOpacity onPress={() => setBuilderDays(builderDays.filter((_, i) => i !== dIdx))}>
-                  <Text className="text-red-500 font-bold">Smazat den</Text>
+                  <Text className="text-red-500 font-bold">{isCs ? "Smazat den" : "Delete day"}</Text>
                 </TouchableOpacity>
               </View>
 
               <TextInput 
-                placeholder="Název dne (např. Tahy)" 
+                placeholder={isCs ? "Název dne (např. Tahy)" : "Day name (e.g. Pull)"} 
                 placeholderTextColor="#64748b" 
                 value={day.name} 
                 onChangeText={(val) => { 
@@ -468,7 +472,8 @@ export default function PlansScreen() {
 
                   <View className="flex-row gap-1.5 mb-2">
                     <View className="flex-1">
-                      <Text className="text-slate-500 text-[8px] uppercase font-bold mb-1 ml-1 text-center">Série</Text>
+                      <Text className="text-slate-500 text-[8px] uppercase font-bold mb-1 ml-1 text-center">{isCs ? "Série" : "Sets"}</Text>
+                      
                       <TextInput 
                         placeholder="S" 
                         placeholderTextColor="#475569" 
@@ -479,7 +484,7 @@ export default function PlansScreen() {
                       />
                     </View>
                     <View className="flex-1">
-                      <Text className="text-slate-500 text-[8px] uppercase font-bold mb-1 ml-1 text-center">Opak.</Text>
+                      <Text className="text-slate-500 text-[8px] uppercase font-bold mb-1 ml-1 text-center">{isCs ? "Opak." : "Reps"}</Text>
                       <TextInput 
                         placeholder="O" 
                         placeholderTextColor="#475569" 
@@ -490,7 +495,7 @@ export default function PlansScreen() {
                       />
                     </View>
                     <View className="flex-1">
-                      <Text className="text-orange-400 text-[8px] uppercase font-bold mb-1 ml-1 text-center">Váha</Text>
+                      <Text className="text-orange-400 text-[8px] uppercase font-bold mb-1 ml-1 text-center">{isCs ? "Váha" : "Weight"}</Text>
                       <TextInput 
                         placeholder="Kg" 
                         placeholderTextColor="#475569" 
@@ -525,7 +530,7 @@ export default function PlansScreen() {
                   </View>
 
                   <TextInput 
-                    placeholder="Instrukce k cviku (technika, tempo...)" 
+                    placeholder={isCs ? "Instrukce k cviku (technika, tempo...)" : "Exercise instructions (technique, tempo...)"} 
                     placeholderTextColor="#475569" 
                     value={ex.notes} 
                     onChangeText={(v) => updateExercise(dIdx, eIdx, 'notes', v)} 
@@ -538,7 +543,7 @@ export default function PlansScreen() {
                 onPress={() => addExercise(dIdx)} 
                 className="bg-slate-700 py-3 rounded-lg items-center border border-slate-600 border-dashed mt-2"
               >
-                <Text className="text-white font-bold">+ Přidat cvik</Text>
+                <Text className="text-white font-bold">{isCs ? "+ Přidat cvik" : "+ Add exercise"}</Text>
               </TouchableOpacity>
 
             </View>
@@ -548,7 +553,7 @@ export default function PlansScreen() {
             onPress={addDay} 
             className="bg-slate-800 py-4 rounded-xl items-center border-2 border-slate-700 border-dashed mb-8"
           >
-            <Text className="text-orange-400 font-bold text-lg">+ Přidat tréninkový den</Text>
+            <Text className="text-orange-400 font-bold text-lg">{isCs ? "+ Přidat tréninkový den" : "+ Add workout day"}</Text>
           </TouchableOpacity>
 
         </ScrollView>
@@ -560,7 +565,7 @@ export default function PlansScreen() {
             className={`py-4 rounded-xl items-center ${isSaving ? 'bg-orange-800' : 'bg-orange-500'}`}
           >
             <Text className="text-white font-bold text-xl">
-              {isSaving ? "Ukládám..." : "Uložit celou šablonu"}
+              {isSaving ? (isCs ? "Ukládám..." : "Saving...") : isCs ? "Uložit celou šablonu" : "Save full template"}
             </Text>
           </TouchableOpacity>
         </View>
@@ -570,15 +575,15 @@ export default function PlansScreen() {
             <View className="bg-slate-800 rounded-t-3xl border-t border-slate-700 flex-1 p-4 shadow-2xl">
               
               <View className="flex-row justify-between items-center mb-6 mt-2">
-                <Text className="text-2xl font-bold text-white">Vybrat cvik</Text>
+                <Text className="text-2xl font-bold text-white">{isCs ? "Vybrat cvik" : "Choose exercise"}</Text>
                 <TouchableOpacity onPress={() => setIsSearchOpen(false)} className="bg-slate-700 p-2 px-4 rounded-lg">
-                  <Text className="text-slate-300 font-bold">Zavřít</Text>
+                  <Text className="text-slate-300 font-bold">{isCs ? "Zavřít" : "Close"}</Text>
                 </TouchableOpacity>
               </View>
 
               <TextInput 
                 autoFocus 
-                placeholder="Napiš název cviku..." 
+                placeholder={isCs ? "Napiš název cviku..." : "Type an exercise name..."} 
                 placeholderTextColor="#64748b" 
                 value={searchQuery} 
                 onChangeText={setSearchQuery} 
@@ -589,22 +594,22 @@ export default function PlansScreen() {
                 {filteredLocalExercises.length > 0 ? (
                   filteredLocalExercises.map(ex => (
                     <TouchableOpacity 
-                      key={ex.name} 
-                      onPress={() => selectExercise(ex.name)} 
+                      key={ex.id} 
+                      onPress={() => selectExercise(getLocalizedExerciseName(ex, language))} 
                       className="bg-slate-900 p-4 rounded-xl border border-slate-700 mb-2 flex-row justify-between items-center"
                     >
-                      <Text className="text-white font-bold text-lg">{ex.name}</Text>
-                      <Text className="text-slate-500 text-xs uppercase font-bold">{MUSCLE_LABELS[ex.primary[0]]}</Text>
+                      <Text className="text-white font-bold text-lg">{getLocalizedExerciseName(ex, language)}</Text>
+                      <Text className="text-slate-500 text-xs uppercase font-bold">{muscleLabels[ex.primary[0]]}</Text>
                     </TouchableOpacity>
                   ))
                 ) : (
                   <View className="p-8 items-center border border-slate-700 border-dashed rounded-2xl bg-slate-900/50">
-                    <Text className="text-slate-400 italic text-center mb-2">Tento cvik ještě neznáme.</Text>
+                    <Text className="text-slate-400 italic text-center mb-2">{isCs ? "Tento cvik ještě neznáme." : "We don't know this exercise yet."}</Text>
                     <TouchableOpacity 
                       onPress={() => selectExercise(searchQuery)} 
                       className="bg-orange-500 px-6 py-3 rounded-xl mt-2"
                     >
-                      <Text className="text-white font-bold">Vytvořit "{searchQuery.trim()}"</Text>
+                      <Text className="text-white font-bold">{isCs ? `Vytvořit "${searchQuery.trim()}"` : `Create "${searchQuery.trim()}"`}</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -622,7 +627,7 @@ export default function PlansScreen() {
   // -------------------------------------------------------------
   return (
     <ScrollView className="flex-1 bg-slate-900 p-4">
-      <Text className="text-3xl font-bold text-white mb-4 mt-2">Moje Plány</Text>
+      <Text className="text-3xl font-bold text-white mb-4 mt-2">{isCs ? "Moje Plány" : "My Plans"}</Text>
 
       <TouchableOpacity 
         activeOpacity={0.8} 
@@ -634,8 +639,8 @@ export default function PlansScreen() {
             <Search size={22} color="#f97316" />
           </View>
           <View>
-            <Text className="text-white font-bold text-lg">Tržiště plánů</Text>
-            <Text className="text-slate-400 text-xs">Objev inspiraci od ostatních</Text>
+            <Text className="text-white font-bold text-lg">{isCs ? "Tržiště plánů" : "Plan marketplace"}</Text>
+            <Text className="text-slate-400 text-xs">{isCs ? "Objev inspiraci od ostatních" : "Discover inspiration from others"}</Text>
           </View>
         </View>
         <Text className="text-orange-500 font-bold text-xl">→</Text>
@@ -651,7 +656,7 @@ export default function PlansScreen() {
         }} 
         className="bg-orange-500 p-4 rounded-xl mb-8 items-center flex-row justify-center gap-2 shadow-lg"
       >
-        <Text className="text-white font-bold text-lg">Vytvořit nový plán</Text>
+        <Text className="text-white font-bold text-lg">{isCs ? "Vytvořit nový plán" : "Create a new plan"}</Text>
       </TouchableOpacity>
       
       {plans.map((plan) => (
@@ -668,7 +673,7 @@ export default function PlansScreen() {
             >
               {plan.is_public ? <Globe size={14} color="#60a5fa" /> : <Lock size={14} color="#94a3b8" />}
               <Text className={`font-bold text-xs ml-1.5 ${plan.is_public ? 'text-blue-400' : 'text-slate-400'}`}>
-                {plan.is_public ? 'Veřejný' : 'Sdílet'}
+                {plan.is_public ? (isCs ? 'Veřejný' : 'Public') : isCs ? 'Sdílet' : 'Share'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -688,18 +693,18 @@ export default function PlansScreen() {
                   className="bg-slate-700 px-4 py-2 rounded-lg" 
                   onPress={() => handleSetActive(plan.id)}
                 >
-                  <Text className="text-white font-semibold">Zvolit</Text>
+                  <Text className="text-white font-semibold">{isCs ? "Zvolit" : "Select"}</Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity 
                 className="bg-slate-700 px-4 py-2 rounded-lg" 
                 onPress={() => handleEditPlan(plan.id)}
               >
-                <Text className="text-white font-semibold">Upravit</Text>
+                <Text className="text-white font-semibold">{isCs ? "Upravit" : "Edit"}</Text>
               </TouchableOpacity>
             </View>
             <TouchableOpacity onPress={() => handleDeletePlan(plan.id)}>
-              <Text className="text-red-500 font-bold">Smazat</Text>
+              <Text className="text-red-500 font-bold">{isCs ? "Smazat" : "Delete"}</Text>
             </TouchableOpacity>
           </View>
         </View>

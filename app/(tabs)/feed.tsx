@@ -5,14 +5,18 @@ import { ScreenContainer } from '@/components/screen-container';
 import { SectionCard } from '@/components/section-card';
 import { formatDistanceToNow } from 'date-fns';
 import cs from 'date-fns/locale/cs';
+import enUS from 'date-fns/locale/en-US';
 import { useRouter } from 'expo-router';
 import { getMyProfile } from '@/lib/profile';
 import { Button, Field } from '@/components/ui';
 import { getFriendOverview, searchPotentialFriends, sendFriendRequestByUsername, acceptFriendRequest, removeFriend } from '@/lib/friends';
 import { Alert } from 'react-native'; // Nezapomeň importovat Alert z react-native!
+import { useLanguage } from '@/hooks/useLanguage';
 
 export default function FeedScreen() {
   const router = useRouter();
+  const { language } = useLanguage();
+  const isCs = language === "cs";
   
   // Přepínač pohledu: Feed (Zeď) vs Friends (Přátelé)
   const [activeTab, setActiveTab] = useState<'feed' | 'friends'>('feed');
@@ -80,39 +84,39 @@ export default function FeedScreen() {
   const handleSendRequest = async (p: any) => {
     try {
       await sendFriendRequestByUsername(p.username);
-      alert("Žádost odeslána! 🤝");
+      alert(isCs ? "Žádost odeslána! 🤝" : "Request sent! 🤝");
       setSearchQuery(""); setSearchResults([]); fetchAllData();
-    } catch (e) { alert("Chyba při odesílání."); }
+    } catch (e) { alert(isCs ? "Chyba při odesílání." : "Failed to send request."); }
   };
   const handleRemoveFriend = async (friendId: string, username: string) => {
     // Pokud jsme na WEBU (prohlížeč)
     if (Platform.OS === 'web') {
-      const confirmed = window.confirm(`Opravdu chceš odebrat uživatele @${username} ze svých přátel?`);
+      const confirmed = window.confirm(isCs ? `Opravdu chceš odebrat uživatele @${username} ze svých přátel?` : `Do you really want to remove @${username} from your friends?`);
       if (confirmed) {
         try {
           await removeFriend(friendId);
           fetchAllData(); // Refreshne data po smazání
         } catch (e) {
-          alert("Nepodařilo se odebrat přítele.");
+          alert(isCs ? "Nepodařilo se odebrat přítele." : "Could not remove friend.");
         }
       }
     } 
     // Pokud jsme na MOBILU (iOS / Android)
     else {
       Alert.alert(
-        "Odebrat z přátel",
-        `Opravdu chceš odebrat uživatele @${username} ze svých přátel?`,
+        isCs ? "Odebrat z přátel" : "Remove friend",
+        isCs ? `Opravdu chceš odebrat uživatele @${username} ze svých přátel?` : `Do you really want to remove @${username} from your friends?`,
         [
-          { text: "Zrušit", style: "cancel" },
+          { text: isCs ? "Zrušit" : "Cancel", style: "cancel" },
           { 
-            text: "Odebrat", 
+            text: isCs ? "Odebrat" : "Remove", 
             style: "destructive",
             onPress: async () => {
               try {
                 await removeFriend(friendId);
                 fetchAllData(); 
               } catch (e) {
-                alert("Nepodařilo se odebrat přítele.");
+                alert(isCs ? "Nepodařilo se odebrat přítele." : "Could not remove friend.");
               }
             }
           }
@@ -136,8 +140,8 @@ export default function FeedScreen() {
           )}
         </View>
         <View>
-          <Text className="text-white font-bold">{item.profiles?.username || 'Anonymní svalovec'}</Text>
-          <Text className="text-slate-500 text-[10px]">{formatDistanceToNow(new Date(item.created_at), { addSuffix: true, locale: cs })}</Text>
+          <Text className="text-white font-bold">{item.profiles?.username || (isCs ? 'Anonymní svalovec' : 'Anonymous lifter')}</Text>
+          <Text className="text-slate-500 text-[10px]">{formatDistanceToNow(new Date(item.created_at), { addSuffix: true, locale: isCs ? cs : enUS })}</Text>
         </View>
       </View>
 
@@ -148,12 +152,12 @@ export default function FeedScreen() {
 
       {item.event_type === 'personal_record' && (
         <View className="mt-3 bg-orange-500/10 border border-orange-500/20 p-3 rounded-xl items-center">
-          <Text className="text-orange-500 font-bold tracking-widest uppercase text-xs">Nové maximum! 🏆</Text>
+          <Text className="text-orange-500 font-bold tracking-widest uppercase text-xs">{isCs ? "Nové maximum! 🏆" : "New PR! 🏆"}</Text>
         </View>
       )}
       {item.event_type === 'level_up' && (
         <View className="mt-3 bg-blue-500/10 border border-blue-500/20 p-3 rounded-xl items-center">
-          <Text className="text-blue-400 font-bold tracking-widest uppercase text-xs">Level {item.metadata?.new_level} dosažen! 🚀</Text>
+          <Text className="text-blue-400 font-bold tracking-widest uppercase text-xs">{isCs ? `Level ${item.metadata?.new_level} dosažen! 🚀` : `Level ${item.metadata?.new_level} reached! 🚀`}</Text>
         </View>
       )}
       {item.event_type === 'achievement_unlocked' && (
@@ -169,16 +173,16 @@ export default function FeedScreen() {
   return (
     <ScreenContainer>
       <View className="p-4 pt-2">
-        <Text className="text-3xl font-black text-white">Komunita 🔥</Text>
-        <Text className="text-slate-400 mb-4">Výkony a přátelé</Text>
+        <Text className="text-3xl font-black text-white">{isCs ? "Komunita 🔥" : "Community 🔥"}</Text>
+        <Text className="text-slate-400 mb-4">{isCs ? "Výkony a přátelé" : "Progress and friends"}</Text>
 
         {/* PŘEPÍNAČ: ZEĎ vs PŘÁTELÉ */}
         <View className="flex-row bg-slate-800 p-1 rounded-2xl border border-slate-700">
           <TouchableOpacity onPress={() => setActiveTab('feed')} className={`flex-1 p-3 rounded-xl items-center ${activeTab === 'feed' ? 'bg-slate-700' : ''}`}>
-            <Text className={`font-bold ${activeTab === 'feed' ? 'text-orange-500' : 'text-slate-400'}`}>Zeď</Text>
+            <Text className={`font-bold ${activeTab === 'feed' ? 'text-orange-500' : 'text-slate-400'}`}>{isCs ? "Zeď" : "Wall"}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setActiveTab('friends')} className={`flex-1 p-3 rounded-xl items-center ${activeTab === 'friends' ? 'bg-slate-700' : ''}`}>
-            <Text className={`font-bold ${activeTab === 'friends' ? 'text-orange-500' : 'text-slate-400'}`}>Přátelé ({friendOverview?.accepted?.length || 0})</Text>
+            <Text className={`font-bold ${activeTab === 'friends' ? 'text-orange-500' : 'text-slate-400'}`}>{isCs ? "Přátelé" : "Friends"} ({friendOverview?.accepted?.length || 0})</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -190,15 +194,15 @@ export default function FeedScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderFeedItem}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchAllData(); }} tintColor="#f97316" />}
-          ListEmptyComponent={<Text className="text-slate-500 text-center mt-20 italic">Zatím se nic neděje. Ulož trénink nebo si přidej přátele!</Text>}
+          ListEmptyComponent={<Text className="text-slate-500 text-center mt-20 italic">{isCs ? "Zatím se nic neděje. Ulož trénink nebo si přidej přátele!" : "Nothing here yet. Log a workout or add some friends!"}</Text>}
         />
       ) : (
         <ScrollView className="px-4 pt-2" refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchAllData(); }} tintColor="#f97316" />}>
           
-          <SectionCard title="Najít přátele" subtitle="Hledej podle uživatelského jména">
+          <SectionCard title={isCs ? "Najít přátele" : "Find friends"} subtitle={isCs ? "Hledej podle uživatelského jména" : "Search by username"}>
             <View className="gap-2">
-              <Field label="Username" placeholder="např. pavelbench" value={searchQuery} onChangeText={setSearchQuery} autoCapitalize="none" />
-              <Button variant="secondary" disabled={isSearching} onPress={handleSearch}>{isSearching ? "Hledám..." : "Hledat"}</Button>
+              <Field label="Username" placeholder={isCs ? "např. pavelbench" : "e.g. pavelbench"} value={searchQuery} onChangeText={setSearchQuery} autoCapitalize="none" />
+              <Button variant="secondary" disabled={isSearching} onPress={handleSearch}>{isSearching ? (isCs ? "Hledám..." : "Searching...") : isCs ? "Hledat" : "Search"}</Button>
             </View>
             
             {searchResults.length > 0 && (
@@ -207,10 +211,10 @@ export default function FeedScreen() {
                   <View key={p.id} className="rounded-2xl border border-slate-700 bg-slate-800 px-4 py-3 flex-row justify-between items-center">
                     <View>
                       <Text className="text-sm font-semibold text-white">@{p.username}</Text>
-                      <Text className="text-xs text-slate-400">Level {p.level}</Text>
+                      <Text className="text-xs text-slate-400">{isCs ? "Level" : "Level"} {p.level}</Text>
                     </View>
                     <TouchableOpacity onPress={() => handleSendRequest(p)} className="bg-orange-500 px-3 py-2 rounded-xl">
-                      <Text className="text-white font-bold text-xs">PŘIDAT</Text>
+                      <Text className="text-white font-bold text-xs">{isCs ? "PŘIDAT" : "ADD"}</Text>
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -218,9 +222,9 @@ export default function FeedScreen() {
             )}
           </SectionCard>
 
-          <SectionCard title="🏆 Žebříček" subtitle="Kdo má nejvíc bodů?">
+          <SectionCard title={isCs ? "🏆 Žebříček" : "🏆 Leaderboard"} subtitle={isCs ? "Kdo má nejvíc bodů?" : "Who has the most points?"}>
             <View className="gap-2">
-              {[...(friendOverview?.accepted ?? []), { id: 'me', username: 'Ty', strength_points: myProfile?.strength_points ?? 0, level: myProfile?.level }]
+              {[...(friendOverview?.accepted ?? []), { id: 'me', username: isCs ? 'Ty' : 'You', strength_points: myProfile?.strength_points ?? 0, level: myProfile?.level }]
                 .sort((a, b) => (b.strength_points ?? 0) - (a.strength_points ?? 0))
                 .map((p, index) => (
                   <View key={p.id} className={`flex-row items-center justify-between p-3 rounded-xl ${p.id === 'me' ? 'bg-orange-500/20 border border-orange-500/50' : 'bg-slate-800'}`}>
@@ -230,36 +234,36 @@ export default function FeedScreen() {
                     </View>
                     <View className="items-end">
                       <Text className="text-white font-bold">{p.strength_points} SP</Text>
-                      <Text className="text-[10px] text-slate-400">Level {p.level}</Text>
+                      <Text className="text-[10px] text-slate-400">{isCs ? "Level" : "Level"} {p.level}</Text>
                     </View>
                   </View>
                 ))}
             </View>
           </SectionCard>
 
-          <SectionCard title="Spravovat přátele" subtitle="Žádosti a aktuální seznam">
-            <Text className="text-sm font-semibold text-white mb-2">Příchozí žádosti ({friendOverview?.pendingIncoming.length ?? 0})</Text>
+          <SectionCard title={isCs ? "Spravovat přátele" : "Manage friends"} subtitle={isCs ? "Žádosti a aktuální seznam" : "Requests and current list"}>
+            <Text className="text-sm font-semibold text-white mb-2">{isCs ? "Příchozí žádosti" : "Incoming requests"} ({friendOverview?.pendingIncoming.length ?? 0})</Text>
             {friendOverview?.pendingIncoming.map((p) => (
               <View key={p.id} className="rounded-2xl border border-slate-700 bg-slate-800 px-4 py-3 flex-row items-center justify-between mb-2">
                 <Text className="text-sm font-semibold text-white">@{p.username}</Text>
                 <TouchableOpacity onPress={() => void acceptFriendRequest(p.id).then(fetchAllData)} className="bg-green-600 px-4 py-2 rounded-lg">
-                  <Text className="text-white font-bold text-xs">Schválit</Text>
+                  <Text className="text-white font-bold text-xs">{isCs ? "Schválit" : "Accept"}</Text>
                 </TouchableOpacity>
               </View>
             ))}
-            {friendOverview?.pendingIncoming.length === 0 && <Text className="text-slate-500 italic mb-4">Žádné nové žádosti.</Text>}
+            {friendOverview?.pendingIncoming.length === 0 && <Text className="text-slate-500 italic mb-4">{isCs ? "Žádné nové žádosti." : "No new requests."}</Text>}
 
-            <Text className="text-sm font-semibold text-white mt-4 mb-2">Moji přátelé ({friendOverview?.accepted.length ?? 0})</Text>
+            <Text className="text-sm font-semibold text-white mt-4 mb-2">{isCs ? "Moji přátelé" : "My friends"} ({friendOverview?.accepted.length ?? 0})</Text>
             {friendOverview?.accepted.map((p) => (
               <TouchableOpacity key={p.id} onPress={() => router.push(`/friend/${p.id}`)} className="rounded-2xl border border-slate-700 bg-slate-800 px-4 py-3 flex-row items-center justify-between mb-2">
                 <View>
                   <Text className="text-sm font-semibold text-white">@{p.username}</Text>
-                  <Text className="text-xs text-slate-400">Level: {p.level} · {p.strength_points} SP</Text>
+                  <Text className="text-xs text-slate-400">{isCs ? "Level" : "Level"}: {p.level} · {p.strength_points} SP</Text>
                 </View>
                 <Text className="text-orange-500 font-bold">→</Text>
               </TouchableOpacity>
             ))}
-            {(!friendOverview?.accepted.length) && <Text className="text-sm text-slate-500 italic">Zatím žádní přátelé.</Text>}
+            {(!friendOverview?.accepted.length) && <Text className="text-sm text-slate-500 italic">{isCs ? "Zatím žádní přátelé." : "No friends yet."}</Text>}
           </SectionCard>
           <View className="h-10" />
         </ScrollView>

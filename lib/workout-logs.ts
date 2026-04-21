@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { tByLanguage } from "@/lib/locale";
 
 export async function logWorkout({
   exercise_id,
@@ -19,7 +20,7 @@ export async function logWorkout({
   } = await supabase.auth.getUser();
 
   if (error) throw error;
-  if (!user) throw new Error("Musíš být přihlášený.");
+  if (!user) throw new Error(await tByLanguage({ cs: "Musíš být přihlášený.", en: "You must be signed in." }));
 
   const totalReps = Math.max(1, sets * reps);
 
@@ -40,7 +41,7 @@ export async function logWorkout({
 // --- TĚLESNÁ VÁHA ---
 export async function logBodyWeight(weight: number) {
   const { data: { user }, error: userError } = await supabase.auth.getUser();
-  if (userError || !user) throw new Error("Musíš být přihlášený.");
+  if (userError || !user) throw new Error(await tByLanguage({ cs: "Musíš být přihlášený.", en: "You must be signed in." }));
 
   const today = new Date().toISOString().split('T')[0];
 

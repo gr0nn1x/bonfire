@@ -4,6 +4,7 @@ import { Pressable, Text, View } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { SectionCard } from "@/components/section-card";
 import { Button, Field } from "@/components/ui";
+import { useLanguage } from "@/hooks/useLanguage";
 import { signIn, signUpAndSignIn } from "@/lib/auth";
 
 type FeedbackState = {
@@ -12,6 +13,8 @@ type FeedbackState = {
 } | null;
 
 export default function SignInScreen() {
+  const { language } = useLanguage();
+  const isCs = language === "cs";
   const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -25,7 +28,7 @@ export default function SignInScreen() {
     if (!username.trim() || !password.trim()) {
       setFeedback({
         type: "error",
-        message: "Vypln uzivatelske jmeno i heslo.",
+        message: isCs ? "Vypln uzivatelske jmeno i heslo." : "Fill in both username and password.",
       });
       return;
     }
@@ -33,7 +36,7 @@ export default function SignInScreen() {
     if (isSignUp && !email.trim()) {
       setFeedback({
         type: "error",
-        message: "Vypln email.",
+        message: isCs ? "Vypln email." : "Fill in your email.",
       });
       return;
     }
@@ -56,7 +59,7 @@ export default function SignInScreen() {
       }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Nepodarilo se dokoncit auth.";
+        error instanceof Error ? error.message : isCs ? "Nepodarilo se dokoncit auth." : "Could not complete authentication.";
       setFeedback({
         type: "error",
         message,
@@ -75,16 +78,20 @@ export default function SignInScreen() {
           </Text>
         </View>
         <Text className="text-4xl font-bold text-text">
-          {isSignUp ? "Vytvor si ucet" : "Vitej zpet"}
+          {isSignUp ? (isCs ? "Vytvor si ucet" : "Create your account") : isCs ? "Vitej zpet" : "Welcome back"}
         </Text>
         <Text className="text-base leading-6 text-muted">
           {isSignUp
-            ? "Par udaju a muzeme jit na trenink."
-            : "Prihlas se a pokracuj tam, kde jsi skoncil."}
+            ? isCs
+              ? "Par udaju a muzeme jit na trenink."
+              : "A few details and you're ready to train."
+            : isCs
+              ? "Prihlas se a pokracuj tam, kde jsi skoncil."
+              : "Sign in and pick up where you left off."}
         </Text>
       </View>
 
-      <SectionCard title={isSignUp ? "Registrace" : "Prihlaseni"}>
+      <SectionCard title={isSignUp ? (isCs ? "Registrace" : "Sign up") : isCs ? "Prihlaseni" : "Sign in"}>
         {feedback ? (
           <View
             className={`rounded-2xl border px-4 py-3 ${
@@ -112,15 +119,15 @@ export default function SignInScreen() {
           />
         ) : null}
         <Field
-          label="Uzivatelske jmeno"
-          placeholder="napr. pavelbench"
+          label={isCs ? "Uzivatelske jmeno" : "Username"}
+          placeholder={isCs ? "napr. pavelbench" : "e.g. pavelbench"}
           value={username}
           onChangeText={setUsername}
           autoCapitalize="none"
         />
         <Field
-          label="Heslo"
-          placeholder="Minimalne 6 znaku"
+          label={isCs ? "Heslo" : "Password"}
+          placeholder={isCs ? "Minimalne 6 znaku" : "At least 6 characters"}
           value={password}
           onChangeText={setPassword}
           secureTextEntry
@@ -129,10 +136,16 @@ export default function SignInScreen() {
         />
         <Button onPress={() => void handleSubmit()} disabled={isSubmitting}>
           {isSubmitting
-            ? "Pracuji..."
+            ? isCs
+              ? "Pracuji..."
+              : "Working..."
             : isSignUp
-              ? "Vytvorit ucet"
-              : "Prihlasit se"}
+              ? isCs
+                ? "Vytvorit ucet"
+                : "Create account"
+              : isCs
+                ? "Prihlasit se"
+                : "Sign in"}
         </Button>
         <Pressable
           onPress={() => {
@@ -143,8 +156,12 @@ export default function SignInScreen() {
         >
           <Text className="text-center text-sm text-primary">
             {isSignUp
-              ? "Uz mas ucet? Prepnout na prihlaseni."
-              : "Jsi novy? Prepnout na registraci."}
+              ? isCs
+                ? "Uz mas ucet? Prepnout na prihlaseni."
+                : "Already have an account? Switch to sign in."
+              : isCs
+                ? "Jsi novy? Prepnout na registraci."
+                : "New here? Switch to sign up."}
           </Text>
         </Pressable>
       </SectionCard>

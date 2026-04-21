@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import type { WorkoutPlanInput } from "@/types/database";
+import { tByLanguage } from "@/lib/locale";
 
 export async function createWorkoutPlan(input: WorkoutPlanInput) {
   const {
@@ -12,7 +13,7 @@ export async function createWorkoutPlan(input: WorkoutPlanInput) {
   }
 
   if (!user) {
-    throw new Error("Musis byt prihlaseny.");
+    throw new Error(await tByLanguage({ cs: "Musis byt prihlaseny.", en: "You must be signed in." }));
   }
 
   const { data: plan, error: planError } = await supabase

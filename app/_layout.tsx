@@ -4,9 +4,18 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { LoadingScreen } from "@/components/loading-screen";
 import { useAuth } from "@/hooks/useAuth";
+import { LanguageProvider } from "@/hooks/useLanguage";
 import { queryClient } from "@/lib/query-client";
 
 export default function RootLayout() {
+  return (
+    <LanguageProvider>
+      <RootLayoutContent />
+    </LanguageProvider>
+  );
+}
+
+function RootLayoutContent() {
   const { isLoading } = useAuth();
 
   if (isLoading) {
@@ -16,7 +25,6 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <StatusBar style="light" />
-      {/* Tady MUSÍ být Stack, nikoliv Tabs! */}
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: "#0f172a" },
@@ -26,7 +34,7 @@ export default function RootLayout() {
       >
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="friend/[id]" options={{ title: "Profil" }} />
+        <Stack.Screen name="friend/[id]" options={{ title: "Profile" }} />
       </Stack>
     </QueryClientProvider>
   );

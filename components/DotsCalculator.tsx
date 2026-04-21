@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, Modal, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { useLanguage } from "@/hooks/useLanguage";
 
 // 1. Koeficienty pro DOTS (Polynomická rovnice)
 const DOTS_COEFFS = {
@@ -18,6 +19,8 @@ const IPF_GL_COEFFS = {
 };
 
 export function DotsCalculator({ isVisible, onClose }: { isVisible: boolean; onClose: () => void }) {
+  const { language } = useLanguage();
+  const isCs = language === "cs";
   const [scoringSystem, setScoringSystem] = useState<'dots' | 'ipf'>('dots');
   const [gender, setGender] = useState<'male' | 'female'>('male');
   const [bw, setBw] = useState('');
@@ -48,7 +51,7 @@ export function DotsCalculator({ isVisible, onClose }: { isVisible: boolean; onC
         <View className="bg-slate-800 rounded-t-[32px] border-t border-slate-700 p-6 pb-12 shadow-2xl">
           
           <View className="flex-row justify-between items-center mb-6">
-            <Text className="text-white text-xl font-bold">Bodová Kalkulačka 🏆</Text>
+            <Text className="text-white text-xl font-bold">{isCs ? "Bodová Kalkulačka 🏆" : "Scoring Calculator 🏆"}</Text>
             <TouchableOpacity onPress={onClose} className="bg-slate-700 h-8 w-8 rounded-full items-center justify-center">
               <Text className="text-white font-bold mb-0.5">×</Text>
             </TouchableOpacity>
@@ -64,20 +67,20 @@ export function DotsCalculator({ isVisible, onClose }: { isVisible: boolean; onC
             </TouchableOpacity>
           </View>
 
-          {/* Přepínač pohlaví */}
+          {/* Gender */}
           <View className="flex-row mb-8 bg-slate-900 p-1 rounded-xl">
             <TouchableOpacity onPress={() => setGender('male')} className={`flex-1 p-3 rounded-lg ${gender === 'male' ? 'bg-orange-500' : ''}`}>
-              <Text className={`text-center font-bold ${gender === 'male' ? 'text-white' : 'text-slate-400'}`}>Muž</Text>
+              <Text className={`text-center font-bold ${gender === 'male' ? 'text-white' : 'text-slate-400'}`}>{isCs ? "Muž" : "Male"}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setGender('female')} className={`flex-1 p-3 rounded-lg ${gender === 'female' ? 'bg-orange-500' : ''}`}>
-              <Text className={`text-center font-bold ${gender === 'female' ? 'text-white' : 'text-slate-400'}`}>Žena</Text>
+              <Text className={`text-center font-bold ${gender === 'female' ? 'text-white' : 'text-slate-400'}`}>{isCs ? "Žena" : "Female"}</Text>
             </TouchableOpacity>
           </View>
 
           {/* Vstupní pole */}
           <View className="flex-row gap-4 mb-8">
             <View className="flex-1">
-              <Text className="text-slate-500 font-bold uppercase text-[10px] mb-2 ml-1">Váha těla (kg)</Text>
+              <Text className="text-slate-500 font-bold uppercase text-[10px] mb-2 ml-1">{isCs ? "Váha těla (kg)" : "Bodyweight (kg)"}</Text>
               <TextInput 
                 keyboardType="numeric" 
                 value={bw} 
@@ -103,7 +106,7 @@ export function DotsCalculator({ isVisible, onClose }: { isVisible: boolean; onC
           {/* Zobrazení výsledku */}
           <View className="items-center bg-blue-500/10 p-6 rounded-[32px] border border-blue-500/30">
             <Text className="text-blue-400 font-bold uppercase tracking-widest text-xs mb-1">
-              Tvoje {scoringSystem === 'dots' ? 'DOTS' : 'IPF GL'} body
+              {isCs ? "Tvoje" : "Your"} {scoringSystem === 'dots' ? 'DOTS' : 'IPF GL'} {isCs ? "body" : "score"}
             </Text>
             <Text className="text-white font-black text-6xl tracking-tighter">
               {score > 0 ? score.toFixed(2) : '0.00'}

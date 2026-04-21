@@ -5,8 +5,11 @@ import { ScreenContainer } from '@/components/screen-container';
 import { useRouter } from 'expo-router';
 // PŘIDÁNA IKONKA DOWNLOAD
 import { Search, ArrowLeft, Download } from 'lucide-react-native';
+import { useLanguage } from '@/hooks/useLanguage';
 
 export default function DiscoverScreen() {
+  const { language } = useLanguage();
+  const isCs = language === "cs";
   const [plans, setPlans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCloning, setIsCloning] = useState(false);
@@ -43,15 +46,15 @@ export default function DiscoverScreen() {
         const author = profilesData?.find(p => p.id === plan.user_id);
         return {
           ...plan,
-          profiles: author || { username: 'Neznámý', level: 1 } 
+          profiles: author || { username: isCs ? 'Neznámý' : 'Unknown', level: 1 } 
         };
       });
 
       setPlans(enrichedPlans);
     } catch (e: any) {
-      console.error("Chyba tržiště:", e.message);
-      if (Platform.OS === 'web') window.alert("Nepodařilo se načíst plány z Tržiště.");
-      else Alert.alert("Chyba", "Nepodařilo se načíst plány z Tržiště.");
+      console.error("Discover error:", e.message);
+      if (Platform.OS === 'web') window.alert(isCs ? "Nepodařilo se načíst plány z Tržiště." : "Could not load plans from the marketplace.");
+      else Alert.alert(isCs ? "Chyba" : "Error", isCs ? "Nepodařilo se načíst plány z Tržiště." : "Could not load plans from the marketplace.");
     } finally {
       setLoading(false);
     }
@@ -65,7 +68,7 @@ export default function DiscoverScreen() {
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Nejsi přihlášen");
+      if (!user) throw new Error(isCs ? "Nejsi přihlášen" : "You are not signed in");
 
       // 1. Zkopírování hlavního plánu
       const { data: newPlan, error: planErr } = await supabase.from('workout_plans').insert({
@@ -111,14 +114,14 @@ export default function DiscoverScreen() {
       const newCount = (sourcePlan.copies_count || 0) + 1;
       await supabase.from('workout_plans').update({ copies_count: newCount }).eq('id', sourcePlan.id);
 
-      if (Platform.OS === 'web') window.alert("Úspěch! 🎉\nPlán byl přidán do tvé knihovny.");
-      else Alert.alert("Úspěch! 🎉", "Plán byl přidán do tvé knihovny.");
+      if (Platform.OS === 'web') window.alert(isCs ? "Úspěch! 🎉\nPlán byl přidán do tvé knihovny." : "Success! 🎉\nThe plan was added to your library.");
+      else Alert.alert(isCs ? "Úspěch! 🎉" : "Success! 🎉", isCs ? "Plán byl přidán do tvé knihovny." : "The plan was added to your library.");
       
       router.push('/plans');
       
     } catch (e: any) {
-      if (Platform.OS === 'web') window.alert("Chyba: " + e.message);
-      else Alert.alert("Chyba při kopírování", e.message);
+      if (Platform.OS === 'web') window.alert((isCs ? "Chyba: " : "Error: ") + e.message);
+      else Alert.alert(isCs ? "Chyba při kopírování" : "Copy failed", e.message);
     } finally {
       setIsCloning(false);
     }
@@ -130,7 +133,7 @@ export default function DiscoverScreen() {
         <View className="flex-1 pr-2">
           <Text className="text-xl font-bold text-white">{item.name}</Text>
           <Text className="text-orange-500 font-bold text-sm">
-            Autor: @{item.profiles?.username} (Lvl {item.profiles?.level})
+            {isCs ? "Autor" : "Author"}: @{item.profiles?.username} (Lvl {item.profiles?.level})
           </Text>
         </View>
         <TouchableOpacity 
@@ -139,7 +142,7 @@ export default function DiscoverScreen() {
           className={`px-4 py-2 rounded-xl ${isCloning ? 'bg-orange-800' : 'bg-orange-500'}`}
         >
           <Text className="text-white font-black text-xs uppercase tracking-wider">
-            {isCloning ? "Kopíruji..." : "Získat"}
+            {isCloning ? (isCs ? "Kopíruji..." : "Copying...") : isCs ? "Získat" : "Get"}
           </Text>
         </TouchableOpacity>
       </View>
@@ -147,14 +150,14 @@ export default function DiscoverScreen() {
       {item.description ? (
         <Text className="text-slate-400 italic mt-2 leading-5">"{item.description}"</Text>
       ) : (
-        <Text className="text-slate-600 italic mt-2">Bez popisku</Text>
+        <Text className="text-slate-600 italic mt-2">{isCs ? "Bez popisku" : "No description"}</Text>
       )}
 
       {/* ZDE JE PŘIDÁNO POČÍTADLO STAŽENÍ */}
       <View className="mt-4 flex-row items-center bg-slate-900/50 self-start px-3 py-1.5 rounded-lg border border-slate-700">
         <Download size={14} color="#94a3b8" />
         <Text className="text-slate-400 text-xs font-bold ml-1.5">
-          {item.copies_count || 0}x uloženo
+          {item.copies_count || 0}x {isCs ? "uloženo" : "saved"}
         </Text>
       </View>
     </View>
@@ -170,8 +173,8 @@ export default function DiscoverScreen() {
           <ArrowLeft size={20} color="#f97316" />
         </TouchableOpacity>
         <View>
-          <Text className="text-3xl font-black text-white">Tržiště 🔍</Text>
-          <Text className="text-slate-400">Nejlepší plány od komunity</Text>
+          <Text className="text-3xl font-black text-white">{isCs ? "Tržiště 🔍" : "Marketplace 🔍"}</Text>
+          <Text className="text-slate-400">{isCs ? "Nejlepší plány od komunity" : "Top plans from the community"}</Text>
         </View>
       </View>
 
@@ -187,8 +190,8 @@ export default function DiscoverScreen() {
           ListEmptyComponent={
             <View className="items-center mt-20 px-6">
               <Search size={48} color="#475569" className="mb-4" />
-              <Text className="text-slate-400 text-center font-bold text-lg mb-2">Zatím je tu prázdno</Text>
-              <Text className="text-slate-500 text-center text-sm">Až někdo vytvoří veřejný plán s dostatkem cviků, objeví se právě zde.</Text>
+              <Text className="text-slate-400 text-center font-bold text-lg mb-2">{isCs ? "Zatím je tu prázdno" : "Nothing here yet"}</Text>
+              <Text className="text-slate-500 text-center text-sm">{isCs ? "Až někdo vytvoří veřejný plán s dostatkem cviků, objeví se právě zde." : "Once someone creates a public plan with enough exercises, it will appear here."}</Text>
             </View>
           }
         />

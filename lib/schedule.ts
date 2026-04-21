@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import type { Exercise, Profile, WorkoutPlan } from "@/types/database";
 import type { PlanDayInput } from "@/types/database";
+import { tByLanguage } from "@/lib/locale";
 
 export type ScheduledWorkoutDay = {
   day_number: number;
@@ -34,7 +35,7 @@ export async function createUserSchedule({
     error,
   } = await supabase.auth.getUser();
   if (error) throw error;
-  if (!user) throw new Error("Musíš být přihlášený.");
+  if (!user) throw new Error(await tByLanguage({ cs: "Musíš být přihlášený.", en: "You must be signed in." }));
 
   const { error: insertError } = await supabase.from("user_schedule").insert({
     user_id: user.id,
@@ -132,4 +133,3 @@ export async function fetchMyActiveSchedules(): Promise<ScheduledPlan[]> {
     days: groupedDays.get(s.plan_id as string) ?? [],
   }));
 }
-
