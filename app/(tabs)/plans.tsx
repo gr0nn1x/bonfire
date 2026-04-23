@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal, Platform } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal, Platform, DeviceEventEmitter } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from 'expo-router';
-import { Search, Globe, Lock } from 'lucide-react-native';
+import { Search, Globe, Lock, Check } from 'lucide-react-native';
 import { useLanguage } from "@/hooks/useLanguage";
 
 import { EXERCISE_DATABASE, getLocalizedExerciseName, getLocalizedMuscleLabels } from '@/lib/muscleMap';
@@ -69,12 +69,21 @@ export default function PlansScreen() {
     fetchPlans(); 
   }, [viewMode]);
 
-  const handleSetActive = async (planId: string) => {
+  // NOVÉ: Funkce umí jak zvolit, tak zrušit zvolení plánu
+  const handleToggleActive = async (planId: string, currentlyActive: boolean) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     
+    // Nejprve pro jistotu vše odznačíme
     await supabase.from('workout_plans').update({ is_active: false }).eq('user_id', user.id);
-    await supabase.from('workout_plans').update({ is_active: true }).eq('id', planId);
+    
+    // Pokud na to klikáme, když to aktivní nebylo, tak to zapneme
+    if (!currentlyActive) {
+      await supabase.from('workout_plans').update({ is_active: true }).eq('id', planId);
+    }
+    
+    // VYSLÁNÍ SIGNÁLU: Toto zachytí index.tsx a hned se updatne!
+    DeviceEventEmitter.emit('planChanged');
     
     fetchPlans();
   };
@@ -144,6 +153,8 @@ export default function PlansScreen() {
       try {
         const { error } = await supabase.from('workout_plans').delete().eq('id', planId);
         if (error) throw error;
+        
+        DeviceEventEmitter.emit('planChanged'); // Kdyby smazal zrovna aktivní plán
         fetchPlans();
       } catch (err: any) { 
         Alert.alert(isCs ? "Chyba" : "Error", err.message); 
@@ -296,6 +307,7 @@ export default function PlansScreen() {
         }
       }
 
+      DeviceEventEmitter.emit('planChanged'); // Aktualizuje index
       Alert.alert(isCs ? "Úspěch!" : "Success!", isCs ? "Plán uložen." : "Plan saved.");
       setPlanName(""); 
       setPlanDescription(""); 
@@ -365,9 +377,7 @@ export default function PlansScreen() {
     getLocalizedExerciseName(ex, language).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // -------------------------------------------------------------
-  // RENDER: BUILDER MÓD
-  // -------------------------------------------------------------
+  // BUILDER MÓD ZŮSTÁVÁ STEJNÝ...
   if (viewMode === 'builder') {
     return (
       <View className="flex-1 bg-slate-900">
@@ -623,7 +633,7 @@ export default function PlansScreen() {
   }
 
   // -------------------------------------------------------------
-  // RENDER: LIST MÓD (Hlavní obrazovka plánů)
+  // RENDER: LIST MÓD
   // -------------------------------------------------------------
   return (
     <ScrollView className="flex-1 bg-slate-900 p-4">
@@ -688,14 +698,16 @@ export default function PlansScreen() {
 
           <View className="flex-row justify-between items-center">
             <View className="flex-row gap-2">
-              {!plan.is_active && (
-                <TouchableOpacity 
-                  className="bg-slate-700 px-4 py-2 rounded-lg" 
-                  onPress={() => handleSetActive(plan.id)}
-                >
-                  <Text className="text-white font-semibold">{isCs ? "Zvolit" : "Select"}</Text>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity 
+                className={`px-4 py-2 rounded-lg flex-row items-center ${plan.is_active ? 'bg-orange-500' : 'bg-slate-700'}`} 
+                onPress={() => handleToggleActive(plan.id, plan.is_active)}
+              >
+                {plan.is_active && <Check size={16} color="white" style={{marginRight: 4}} />}
+                <Text className="text-white font-semibold">
+                  {plan.is_active ? (isCs ? "Aktivní" : "Active") : (isCs ? "Zvolit" : "Select")}
+                </Text>
+              </TouchableOpacity>
+
               <TouchableOpacity 
                 className="bg-slate-700 px-4 py-2 rounded-lg" 
                 onPress={() => handleEditPlan(plan.id)}

@@ -19,6 +19,7 @@
     },
     "android": {
       "package": "com.gr0nn1x.bonfire",
+      "permissions": ["INTERNET"],
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo.png",
         "backgroundColor": "#1e1b2e"
