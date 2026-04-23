@@ -44,9 +44,7 @@ export default function HomeScreen() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [completedDates, setCompletedDates] = useState<string[]>([]);
   
-  // Custom název pro volný trénink
   const [customWorkoutName, setCustomWorkoutName] = useState("");
-
   const [allLogs, setAllLogs] = useState<any[]>([]);
   const [allExercises, setAllExercises] = useState<any[]>([]);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
@@ -101,20 +99,6 @@ export default function HomeScreen() {
 
     } catch (e) { console.error(e); } finally { setLoading(false); }
   };
-  useEffect(() => { 
-    // Načte se poprvé při startu
-    fetchData(); 
-
-    // Bude poslouchat signály z jiných obrazovek
-    const subscription = DeviceEventEmitter.addListener('planChanged', () => {
-      fetchData();
-    });
-
-    // Cleanup při odchodu
-    return () => {
-      subscription.remove();
-    };
-  }, []);
 
   const updateTodayWorkout = (plan: any, date: Date) => {
     let dayNum = date.getDay();
@@ -123,7 +107,13 @@ export default function HomeScreen() {
     setTodayWorkout(dayMatch || null);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { 
+    fetchData(); 
+    const subscription = DeviceEventEmitter.addListener('planChanged', () => {
+      fetchData();
+    });
+    return () => subscription.remove();
+  }, []);
 
   const handleDayPress = (day: any) => {
     const [y, m, d] = day.dateString.split('-');
@@ -134,7 +124,6 @@ export default function HomeScreen() {
     } else {
       setTodayWorkout(null);
     }
-    // Vyresetujeme případný custom název při změně dne
     setCustomWorkoutName("");
   };
 
@@ -157,6 +146,7 @@ export default function HomeScreen() {
         return {
           ...pe,
           done: !!log,
+          actual_sets: log ? String(log.sets || "") : String(pe.sets || ""),
           actual_weight: log ? String(log.weight_lifted || "") : String(pe.weight || ""),
           actual_reps: log ? String(log.reps_done || "") : String(pe.reps || ""),
           actual_rpe: log ? String(log.rpe || "") : String(pe.rpe || ""),
@@ -175,8 +165,9 @@ export default function HomeScreen() {
           exercise_id: log.exercise_id, 
           exercises: { name: exDetail?.name }, 
           done: true, 
-          actual_weight: String(log.weight_lifted), 
-          actual_reps: String(log.reps_done), 
+          actual_sets: String(log.sets || ""),
+          actual_weight: String(log.weight_lifted || ""), 
+          actual_reps: String(log.reps_done || ""), 
           actual_rpe: String(log.rpe || ""), 
           actual_percentage: String(log.percentage || ""), 
           actual_notes: log.notes || "", 
@@ -188,43 +179,13 @@ export default function HomeScreen() {
     setSessionExercises(items);
     setIsExecuting(true);
   };
-  const createAndAddExercise = async (newExerciseName: string) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    
-    const trimmedName = newExerciseName.trim();
-    if (!trimmedName) return;
 
-    try {
-      // Vytvoření nového cviku v databázi Supabase
-      const { data: newEx, error } = await supabase
-        .from('exercises')
-        .insert({ 
-          name: trimmedName, 
-          creator_id: user.id, 
-          muscle_group: 'full_body' // Výchozí skupina
-        })
-        .select()
-        .single();
-      
-      if (error) throw error;
-
-      // Přidáme ho rovnou i do lokálního seznamu, aby se příště už normálně vyhledal
-      setAllExercises(prev => [...prev, newEx]);
-      
-      // A rovnou ho přidáme do právě probíhajícího tréninku
-      addExtraExercise(newEx);
-      
-    } catch (e: any) { 
-      Alert.alert(isCs ? "Chyba při vytváření cviku" : "Error creating exercise", e.message); 
-    }
-  };
-
- const addExtraExercise = (exercise: any) => {
+  const addExtraExercise = (exercise: any) => {
     setSessionExercises(prev => [...prev, {
       exercise_id: exercise.id,
       exercises: { name: exercise.name },
       done: true,
+      actual_sets: "",
       actual_weight: "",
       actual_reps: "",
       actual_rpe: "",
@@ -233,6 +194,30 @@ export default function HomeScreen() {
       is_extra: true
     }]);
     setShowExercisePicker(false);
+  };
+
+  const createAndAddExercise = async (newExerciseName: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    
+    const trimmedName = newExerciseName.trim();
+    if (!trimmedName) return;
+
+    try {
+      const { data: newEx, error } = await supabase
+        .from('exercises')
+        .insert({ name: trimmedName, creator_id: user.id, muscle_group: 'full_body' })
+        .select()
+        .single();
+      
+      if (error) throw error;
+
+      setAllExercises(prev => [...prev, newEx]);
+      addExtraExercise(newEx);
+      
+    } catch (e: any) { 
+      Alert.alert(isCs ? "Chyba při vytváření cviku" : "Error creating exercise", e.message); 
+    }
   };
 
  const saveWorkoutSession = async () => {
@@ -266,15 +251,13 @@ export default function HomeScreen() {
             user_id: user.id,
             plan_id: planId,
             exercise_id: ex.exercise_id,
+            sets: safeParseInt(ex.actual_sets) || null, 
             weight_lifted: safeParseFloat(ex.actual_weight) || 0,
             reps_done: safeParseInt(ex.actual_reps) || 0,
             rpe: safeParseFloat(ex.actual_rpe),
             percentage: safeParseFloat(ex.actual_percentage),
             notes: ex.actual_notes || null,
             date: safeDateString,
-            // 💡 TIP: Pokud si v Supabase přidáš do workout_logs sloupec 'custom_name',
-            // stačí odkomentovat řádek níže a tvůj vlastní název se uloží do databáze!
-            // custom_name: customWorkoutName ? customWorkoutName : null
           };
         });
 
@@ -283,8 +266,12 @@ export default function HomeScreen() {
         if (error) throw error;
       }
       
-      setIsExecuting(false);
       fetchData(); 
+      
+      // OPRAVA GHOST CLICKU: Malé zpoždění před zavřením modalu
+      setTimeout(() => {
+        setIsExecuting(false);
+      }, 150);
       
     } catch (e: any) { 
       Alert.alert(isCs ? "Chyba při ukládání" : "Save failed", e.message); 
@@ -387,7 +374,7 @@ export default function HomeScreen() {
             <View className="bg-slate-900/50 p-3 rounded-2xl mb-4 border border-slate-700/50">
               {currentDayLogs.map((log, i) => (
                 <Text key={i} className="text-slate-400 text-xs mb-1">
-                  • {log.exercises?.name} ({log.weight_lifted}kg x {log.reps_done})
+                  • {log.exercises?.name} ({log.sets ? `${log.sets}x ` : ''}{log.weight_lifted}kg x {log.reps_done})
                 </Text>
               ))}
             </View>
@@ -430,7 +417,6 @@ export default function HomeScreen() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1 bg-slate-900">
           <View className="p-6 pt-12 bg-slate-800 flex-row justify-between items-center border-b border-slate-700">
             <View className="flex-1 mr-4">
-              {/* TADY JE INPUT PRO PŘEJMENOVÁNÍ VOLNÉHO TRÉNINKU */}
               {todayWorkout ? (
                 <Text className="text-white text-xl font-bold" numberOfLines={1}>{todayWorkout.name}</Text>
               ) : (
@@ -474,7 +460,6 @@ export default function HomeScreen() {
                       <Text className="text-lg">⏱️</Text>
                     </TouchableOpacity>
 
-                    {/* OPRAVENÝ CHECKBOX */}
                     <TouchableOpacity 
                       onPress={() => { 
                         const n = [...sessionExercises]; 
@@ -489,28 +474,29 @@ export default function HomeScreen() {
                 </View>
 
                 <View className="gap-3">
-                  <View className="flex-row gap-2">
+                  
+                  {/* NOVÉ: PŘIDÁNÍ INPUTU PRO SÉRIE */}
+                  <View className="flex-row gap-1.5 mb-1">
                     <View className="flex-1">
-                      <Text className="text-slate-500 text-[9px] font-bold mb-1 uppercase ml-1">{isCs ? "Váha (kg)" : "Weight (kg)"}</Text>
-                      {/* OPRAVENÝ INPUT VÁHY */}
+                      <Text className="text-slate-500 text-[9px] font-bold mb-1 ml-1 text-center uppercase">{isCs ? "Série" : "Sets"}</Text>
                       <TextInput 
+                        placeholder="S"
+                        placeholderTextColor="#475569"
                         keyboardType="numeric" 
-                        value={ex.actual_weight} 
+                        value={ex.actual_sets} 
                         onChangeText={(v) => { 
                           const n = [...sessionExercises]; 
-                          n[idx] = { ...n[idx], actual_weight: v }; 
+                          n[idx] = { ...n[idx], actual_sets: v }; 
                           setSessionExercises(n); 
                         }} 
                         className="bg-slate-900 text-white p-3 rounded-xl border border-slate-700 text-center font-bold" 
                       />
-                      <TouchableOpacity className="mt-1 self-center" onPress={() => { setCurrentWeightForCalc(parseFloat(ex.actual_weight) || 0); setShowPlateCalc(true); }}>
-                        <Text className="text-orange-500 text-[10px] font-bold italic">{isCs ? "🧮 KOTOUČE" : "🧮 PLATES"}</Text>
-                      </TouchableOpacity>
                     </View>
                     <View className="flex-1">
-                      <Text className="text-slate-500 text-[9px] font-bold mb-1 uppercase ml-1">{isCs ? "Opakování" : "Reps"}</Text>
-                      {/* OPRAVENÝ INPUT OPAKOVÁNÍ */}
+                      <Text className="text-slate-500 text-[9px] font-bold mb-1 ml-1 text-center uppercase">{isCs ? "Opak." : "Reps"}</Text>
                       <TextInput 
+                        placeholder="O"
+                        placeholderTextColor="#475569"
                         keyboardType="numeric" 
                         value={ex.actual_reps} 
                         onChangeText={(v) => { 
@@ -521,11 +507,29 @@ export default function HomeScreen() {
                         className="bg-slate-900 text-white p-3 rounded-xl border border-slate-700 text-center font-bold" 
                       />
                     </View>
+                    <View className="flex-1">
+                      <Text className="text-orange-400 text-[9px] font-bold mb-1 ml-1 text-center uppercase">{isCs ? "Váha" : "Weight"}</Text>
+                      <TextInput 
+                        placeholder="Kg"
+                        placeholderTextColor="#475569"
+                        keyboardType="numeric" 
+                        value={ex.actual_weight} 
+                        onChangeText={(v) => { 
+                          const n = [...sessionExercises]; 
+                          n[idx] = { ...n[idx], actual_weight: v }; 
+                          setSessionExercises(n); 
+                        }} 
+                        className="bg-slate-900 text-white p-3 rounded-xl border border-orange-500/20 text-center font-bold" 
+                      />
+                    </View>
                   </View>
+                  <TouchableOpacity className="mb-2 self-center" onPress={() => { setCurrentWeightForCalc(parseFloat(ex.actual_weight) || 0); setShowPlateCalc(true); }}>
+                    <Text className="text-orange-500 text-[10px] font-bold italic">{isCs ? "🧮 KOTOUČE" : "🧮 PLATES"}</Text>
+                  </TouchableOpacity>
 
                   <View className="flex-row gap-2">
                     <View className="flex-1">
-                      <Text className="text-slate-500 text-[9px] font-bold mb-1 uppercase ml-1">RPE (1-10)</Text>
+                      <Text className="text-slate-500 text-[9px] font-bold mb-1 ml-1 text-center uppercase">RPE (1-10)</Text>
                       <TextInput 
                         keyboardType="numeric" 
                         value={ex.actual_rpe} 
@@ -538,7 +542,7 @@ export default function HomeScreen() {
                       />
                     </View>
                     <View className="flex-1">
-                      <Text className="text-slate-500 text-[9px] font-bold mb-1 uppercase ml-1">{isCs ? "Zátěž (%)" : "Load (%)"}</Text>
+                      <Text className="text-slate-500 text-[9px] font-bold mb-1 ml-1 text-center uppercase">{isCs ? "Zátěž (%)" : "Load (%)"}</Text>
                       <TextInput 
                         keyboardType="numeric" 
                         value={ex.actual_percentage} 
@@ -553,7 +557,7 @@ export default function HomeScreen() {
                   </View>
 
                   <View>
-                    <Text className="text-slate-500 text-[9px] font-bold mb-1 uppercase ml-1">{isCs ? "Tvoje poznámka" : "Your note"}</Text>
+                    <Text className="text-slate-500 text-[9px] font-bold mb-1 ml-1 uppercase">{isCs ? "Tvoje poznámka" : "Your note"}</Text>
                     <TextInput 
                       multiline 
                       value={ex.actual_notes} 
@@ -619,8 +623,8 @@ export default function HomeScreen() {
                   <Plus size={20} color="#f97316" />
                 </TouchableOpacity>
               )}
-             ListEmptyComponent={
-                <View className="p-8 items-center border border-slate-700 border-dashed rounded-2xl bg-slate-900/50 mt-4">
+              ListEmptyComponent={
+                <View className="p-8 items-center border border-slate-700 border-dashed rounded-2xl bg-slate-900/50 mt-4 mx-4">
                   <Text className="text-slate-400 italic text-center mb-2">
                     {isCs ? "Tento cvik ještě neznáme." : "We don't know this exercise yet."}
                   </Text>
